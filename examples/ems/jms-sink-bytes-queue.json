@@ -1,0 +1,17 @@
+{
+    "name": "jms-sink-bytes-queue",
+    "config": {
+        "connector.class": "io.macronova.kafka.connect.jms.JmsSinkConnector",
+        "tasks.max": "1",
+        "topics": "to-jms-bytes-queue",
+        "jms.connection.factory": "com.tibco.tibjms.TibjmsQueueConnectionFactory",
+        "jms.url": "tcp://ems:7222,tcp://ems:7222",
+        "jms.username": "admin",
+        "jms.password": "",
+        "jms.destination.name": "queue.from.kafka.bytes",
+        "jms.destination.type": "queue",
+        "jms.message.converter.output.format": "bytes",
+        "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+        "value.converter": "io.macronova.kafka.connect.converters.ByteArrayConverter"
+    }
+}

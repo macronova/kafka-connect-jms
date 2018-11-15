@@ -1,0 +1,18 @@
+{
+    "name": "jms-sink-map-queue",
+    "config": {
+        "connector.class": "io.macronova.kafka.connect.jms.JmsSinkConnector",
+        "tasks.max": "1",
+        "topics": "to-jms-map-queue",
+        "jms.connection.factory": "com.tibco.tibjms.TibjmsQueueConnectionFactory",
+        "jms.url": "tcp://ems:7222,tcp://ems:7222",
+        "jms.username": "admin",
+        "jms.password": "",
+        "jms.destination.name": "queue.from.kafka.map",
+        "jms.destination.type": "queue",
+        "jms.message.converter.output.format": "map",
+        "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+        "value.converter": "io.confluent.connect.avro.AvroConverter",
+        "value.converter.schema.registry.url": "http://schema-registry:8081"
+    }
+}

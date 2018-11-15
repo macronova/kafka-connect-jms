@@ -1,0 +1,20 @@
+{
+    "name": "jms-sink-text-queue",
+    "config": {
+        "connector.class": "io.macronova.kafka.connect.jms.JmsSinkConnector",
+        "tasks.max": "2",
+        "topics": "to-jms-text-queue",
+        "jms.connection.factory": "com.tibco.tibjms.TibjmsQueueConnectionFactory",
+        "jms.url": "tcp://ems:7222,tcp://ems:7222",
+        "jms.username": "admin",
+        "jms.password": "",
+        "jms.destination.name": "queue.from.kafka.text",
+        "jms.destination.type": "queue",
+        "jms.message.converter": "io.macronova.kafka.connect.jms.common.StandardJmsConverter",
+        "jms.message.converter.output.format": "text",
+        "max.retries": 100,
+        "retry.backoff.ms": 60000,
+        "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+        "value.converter": "org.apache.kafka.connect.storage.StringConverter"
+    }
+}

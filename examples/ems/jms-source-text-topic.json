@@ -1,0 +1,23 @@
+{
+    "name": "jms-source-text-topic",
+    "config": {
+        "connector.class": "io.macronova.kafka.connect.jms.JmsSourceConnector",
+        "tasks.max": "2",
+        "topics": "from-jms-text-topic",
+        "jms.connection.factory": "com.tibco.tibjms.TibjmsQueueConnectionFactory",
+        "jms.url": "tcp://ems:7222,tcp://ems:7222",
+        "jms.username": "admin",
+        "jms.password": "",
+        "jms.destination.name": "topic.to.kafka.text",
+        "jms.destination.type": "topic",
+        "jms.topic.subscription.name": "my-shared-subscription",
+        "jms.message.converter": "io.macronova.kafka.connect.jms.common.StandardJmsConverter",
+        "max.poll.records": 100,
+        "poll.timeout.ms": 1000,
+        "max.retries": 100,
+        "retry.backoff.ms": 60000,
+        "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+        "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter.schemas.enable": "false"
+    }
+}

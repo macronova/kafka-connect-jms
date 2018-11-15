@@ -1,0 +1,17 @@
+{
+    "name": "jms-source-bytes-queue",
+    "config": {
+        "connector.class": "io.macronova.kafka.connect.jms.JmsSourceConnector",
+        "tasks.max": "1",
+        "topics": "from-jms-bytes-queue",
+        "jms.connection.factory": "com.tibco.tibjms.TibjmsQueueConnectionFactory",
+        "jms.url": "tcp://ems:7222,tcp://ems:7222",
+        "jms.username": "admin",
+        "jms.password": "",
+        "jms.destination.name": "queue.to.kafka.bytes",
+        "jms.destination.type": "queue",
+        "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+        "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter.schemas.enable": "false"
+    }
+}

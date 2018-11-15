@@ -1,0 +1,24 @@
+{
+    "name": "jms-sink-queue",
+    "config": {
+        "connector.class": "io.macronova.kafka.connect.jms.JmsSinkConnector",
+        "tasks.max": "2",
+        "topics": "to-jms-queue",
+        "java.naming.factory.initial": "com.solacesystems.jndi.SolJNDIInitialContextFactory",
+        "java.naming.provider.url": "smf://solace:55555",
+        "java.naming.security.principal": "admin",
+        "java.naming.security.credentials": "admin",
+        "jndi.connection.factory": "/jms/cf/default",
+        "jndi.extra.params": "Solace_JMS_VPN=default",
+        "jms.username": "admin",
+        "jms.password": "admin",
+        "jms.destination.name": "/JNDI/Q/queueFromKafka",
+        "jms.destination.type": "queue",
+        "jms.message.converter": "io.macronova.kafka.connect.jms.common.StandardJmsConverter",
+        "jms.message.converter.output.format": "text",
+        "max.retries": 100,
+        "retry.backoff.ms": 60000,
+        "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+        "value.converter": "org.apache.kafka.connect.storage.StringConverter"
+    }
+}

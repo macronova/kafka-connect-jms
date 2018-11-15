@@ -1,0 +1,21 @@
+{
+    "name": "jms-sink-queue",
+    "config": {
+        "connector.class": "io.macronova.kafka.connect.jms.JmsSinkConnector",
+        "tasks.max": "2",
+        "topics": "to-jms-queue",
+        "jms.dialect.class": "io.macronova.kafka.connect.jms.common.RabbitMqDialect",
+        "jms.dialect.host": "rabbitmq",
+        "jms.dialect.port": "5672",
+        "jms.username": "guest",
+        "jms.password": "guest",
+        "jms.destination.name": "Queue1",
+        "jms.destination.type": "queue",
+        "jms.message.converter": "io.macronova.kafka.connect.jms.common.StandardJmsConverter",
+        "jms.message.converter.output.format": "text",
+        "max.retries": 100,
+        "retry.backoff.ms": 60000,
+        "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+        "value.converter": "org.apache.kafka.connect.storage.StringConverter"
+    }
+}

@@ -1,0 +1,25 @@
+{
+    "name": "jms-source-queue",
+    "config": {
+        "connector.class": "io.macronova.kafka.connect.jms.JmsSourceConnector",
+        "tasks.max": "2",
+        "topics": "from-jms-queue",
+        "java.naming.factory.initial": "org.apache.activemq.jndi.ActiveMQInitialContextFactory",
+        "java.naming.provider.url": "tcp://activemq:61616",
+        "java.naming.security.principal": "myuser",
+        "java.naming.security.credentials": "mypassword",
+        "jndi.connection.factory": "ConnectionFactory",
+        "jms.username": "myuser",
+        "jms.password": "mypassword",
+        "jms.destination.name": "dynamicQueues/queueToKafka",
+        "jms.destination.type": "queue",
+        "jms.message.converter": "io.macronova.kafka.connect.jms.common.StandardJmsConverter",
+        "max.poll.records": 100,
+        "poll.timeout.ms": 1000,
+        "max.retries": 100,
+        "retry.backoff.ms": 60000,
+        "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+        "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter.schemas.enable": "false"
+    }
+}

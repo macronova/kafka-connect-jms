@@ -1,0 +1,23 @@
+{
+    "name": "jms-sink-queue",
+    "config": {
+        "connector.class": "io.macronova.kafka.connect.jms.JmsSinkConnector",
+        "tasks.max": "2",
+        "topics": "to-jms-queue",
+        "java.naming.factory.initial": "org.apache.activemq.jndi.ActiveMQInitialContextFactory",
+        "java.naming.provider.url": "tcp://activemq:61616",
+        "java.naming.security.principal": "myuser",
+        "java.naming.security.credentials": "mypassword",
+        "jndi.connection.factory": "ConnectionFactory",
+        "jms.username": "myuser",
+        "jms.password": "mypassword",
+        "jms.destination.name": "dynamicQueues/queueFromKafka",
+        "jms.destination.type": "queue",
+        "jms.message.converter": "io.macronova.kafka.connect.jms.common.StandardJmsConverter",
+        "jms.message.converter.output.format": "text",
+        "max.retries": 100,
+        "retry.backoff.ms": 60000,
+        "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+        "value.converter": "org.apache.kafka.connect.storage.StringConverter"
+    }
+}

@@ -1,0 +1,157 @@
+// Release command:
+// $ gradle clean build zip # (optionally 'publish' to release new version in Maven repository)
+
+import org.apache.tools.ant.filters.*
+
+apply plugin: 'java'
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+apply plugin: 'idea'
+apply plugin: 'jacoco'
+
+group = 'io.macronova.kafka'
+version = '1.0.0'
+
+sourceCompatibility = '1.8'
+targetCompatibility = '1.8'
+
+repositories {
+	mavenCentral()
+	maven {
+		url "http://packages.confluent.io/maven"
+	}
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+	classifier = 'sources'
+	from sourceSets.main.allSource
+}
+
+task javadocJar(type: Jar, dependsOn: javadoc) {
+	classifier = 'javadoc'
+	from javadoc.destinationDir
+}
+
+jacocoTestReport {
+	reports {
+		xml.enabled true
+		html.enabled false
+	}
+}
+
+check.dependsOn jacocoTestReport
+
+publishing {
+	publications {
+		mavenJava(MavenPublication) {
+			from components.java
+			artifact sourcesJar
+			artifact javadocJar
+			pom {
+				name = 'Kafka Connect JMS'
+				description = 'Sink and source JMS connector for Kafka Connect.'
+				url = 'https://github.com/macronova/kafka-connect-jms'
+				licenses {
+					license {
+						name = 'The Apache License, Version 2.0'
+						url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+					}
+				}
+				developers {
+					developer {
+						id = 'Macronova'
+						name = 'Macronova'
+						email = 'office@macronova.io'
+					}
+				}
+				scm {
+					connection = 'scm:git:git://github.com/macronova/kafka-connect-jms.git'
+					developerConnection = 'scm:git:ssh://github.com:macronova/kafka-connect-jms.git'
+					url = 'https://github.com/macronova/kafka-connect-jms'
+				}
+			}
+		}
+	}
+	repositories {
+		maven {
+			credentials {
+				username project.hasProperty( 'ossrhUsername' ) ? project.property( 'ossrhUsername' ) : ''
+				password project.hasProperty( 'ossrhPassword' ) ? project.property( 'ossrhPassword' ) : ''
+			}
+			url = version.endsWith('SNAPSHOT') ? "$buildDir/repos/snapshots" : "$buildDir/repos/releases"
+			// url = version.endsWith('SNAPSHOT') ? "https://oss.sonatype.org/content/repositories/snapshots/" : "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
+		}
+	}
+}
+
+signing {
+	sign publishing.publications.mavenJava
+}
+
+task prepareConfluentHubArchive(type: Copy, dependsOn: 'build') {
+	from('docs/manifest.json') {
+		destinationDir file("$buildDir")
+		expand(project: project)
+	}
+	from('docs') {
+		include 'macronova-logo.png'
+		include 'jms-logo.png'
+		include 'apache-logo.png'
+		into "archive/assets"
+	}
+	from(".") {
+		include 'README.md'
+		include 'LICENSE'
+		into "archive/doc"
+	}
+	from('docs') {
+		include 'quickstart-jms-sink.properties'
+		include 'quickstart-jms-source.properties'
+		into "archive/etc"
+	}
+	from("$buildDir/libs") {
+		include "${project.name}-${project.version}.jar"
+		into "archive/lib"
+	}
+}
+
+task buildConfluentHubArchive(type: Zip, dependsOn: 'prepareConfluentHubArchive') {
+	from files("$buildDir/manifest.json", "$buildDir/archive")
+	archiveName "macronova-${project.name}-${project.version}.zip"
+	destinationDir(file("$buildDir/confluent-hub"))
+}
+
+dependencies {
+	compileOnly 'org.apache.kafka:connect-api:1.1.0'
+	compileOnly 'org.apache.kafka:connect-json:1.1.0' // Convert Kafka Connect data to JSON format.
+	compileOnly 'io.confluent:kafka-connect-avro-converter:5.0.0' // Convert Kafka Connect data to Apache Avro format.
+	compile 'javax.jms:javax.jms-api:2.0'
+
+	testCompile 'junit:junit:4.12'
+	testCompile 'org.apache.kafka:connect-api:1.1.0'
+	testCompile 'org.apache.kafka:connect-json:1.1.0'
+	testCompile 'org.apache.activemq:activemq-broker:5.15.4'
+}
+
+processResources {
+	filter ReplaceTokens, tokens: [
+			"application.version": project.property( "version" )
+	]
+}
+
+// Create fat-JAR with all required dependencies.
+//jar {
+//	from {
+//		configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+//	}
+//}
+
+task wrapper(type: Wrapper) {
+	gradleVersion = '4.10.2'
+}
+
+task zip(type: Zip) {
+	from configurations.runtime.allArtifacts.files
+	from configurations.runtime
+	into (project.name + '-' + project.version)
+}

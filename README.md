@@ -205,7 +205,8 @@ public interface JmsConverter {
      * @return Connect source record.
      * @throws JMSException Report error.
      */
-    SourceRecord messageToRecord(Message message, String topic, Map<String, ?> sourcePartition, Map<String, ?> sourceOffset) throws JMSException;
+    SourceRecord messageToRecord(Message message, String topic,
+        Map<String, ?> sourcePartition, Map<String, ?> sourceOffset) throws JMSException;
 }
 ```
 
@@ -232,7 +233,8 @@ public interface JmsDialect {
 
     /**
      * @param e Encountered exception.
-     * @return {@code true} if connector should re-establish connectivity upon given error, {@code false} otherwise.
+     * @return {@code true} if connector should re-establish connectivity upon given error,
+     *         {@code false} otherwise.
      */
     boolean reconnectOnError(Exception e);
 }

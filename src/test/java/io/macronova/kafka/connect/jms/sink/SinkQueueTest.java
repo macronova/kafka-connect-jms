@@ -17,6 +17,7 @@ package io.macronova.kafka.connect.jms.sink;
 
 import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -34,10 +35,27 @@ import org.apache.activemq.command.ActiveMQQueue;
 import org.apache.activemq.command.ActiveMQTextMessage;
 import org.apache.activemq.command.Message;
 import org.apache.kafka.common.record.TimestampType;
+import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
+import org.apache.kafka.connect.header.ConnectHeaders;
+import org.apache.kafka.connect.header.Header;
+import org.apache.kafka.connect.header.Headers;
 import org.apache.kafka.connect.sink.SinkRecord;
 import io.macronova.kafka.connect.jms.CustomJmsDialect;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.apache.kafka.connect.data.Schema.BOOLEAN_SCHEMA;
+import static org.apache.kafka.connect.data.Schema.BYTES_SCHEMA;
+import static org.apache.kafka.connect.data.Schema.FLOAT32_SCHEMA;
+import static org.apache.kafka.connect.data.Schema.FLOAT64_SCHEMA;
+import static org.apache.kafka.connect.data.Schema.INT16_SCHEMA;
+import static org.apache.kafka.connect.data.Schema.INT32_SCHEMA;
+import static org.apache.kafka.connect.data.Schema.INT64_SCHEMA;
+import static org.apache.kafka.connect.data.Schema.INT8_SCHEMA;
+import static org.apache.kafka.connect.data.Schema.STRING_SCHEMA;
+import static org.apache.kafka.connect.data.SchemaBuilder.map;
+import static org.apache.kafka.connect.data.SchemaBuilder.struct;
 
 /**
  * Basic tests for sending Kafka Connect records to JMS queue.
@@ -56,10 +74,20 @@ public class SinkQueueTest extends BaseSinkTest {
 	}
 
 	@Test
+	public void testMessageDeliveryWithCustomHeadersJndi() throws Exception {
+		checkMessageDeliveryWithCustomHeaders( configurationJndi() );
+	}
+
+	@Test
 	public void testMessageDeliveryDirect() throws Exception {
 		checkMessageDelivery(
 				configurationDirect(), new String[] { "Bye bye, JMS!", "Hello, Kafka!" }, new Object[] { 13, null }
 		);
+	}
+
+	@Test
+	public void testMessageDeliveryWithCustomHeadersDirect() throws Exception {
+		checkMessageDeliveryWithCustomHeaders( configurationDirect() );
 	}
 
 	private void checkMessageDelivery(Map<String, String> configuration, String[] payload, Object[] id) throws Exception {
@@ -80,6 +108,56 @@ public class SinkQueueTest extends BaseSinkTest {
 			Assert.assertNotNull( messages[i].getProperty( "KafkaPartition" ) );
 			Assert.assertNotNull( messages[i].getProperty( "KafkaOffset" ) );
 		}
+	}
+
+	private void checkMessageDeliveryWithCustomHeaders(Map<String, String> configuration) throws Exception {
+		final String key = "key";
+		final String payload = "payload";
+
+		final byte[] exampleByteArray = "test".getBytes( UTF_8 );
+
+		final Map<String,String> exampleMap = new HashMap<>();
+		exampleMap.put( "MapKey", "MapValue" );
+
+		final Struct exampleStruct = new Struct( struct().field( "testField", STRING_SCHEMA ).build() )
+				.put( "testField", "testFieldValue" );
+
+		final Headers headers = new ConnectHeaders();
+		headers.add( "ByteHeaderExample", Byte.MAX_VALUE, INT8_SCHEMA );
+		headers.add( "ShortHeaderExample", Short.MAX_VALUE, INT16_SCHEMA );
+		headers.add( "IntegerHeaderExample", Integer.MAX_VALUE, INT32_SCHEMA );
+		headers.add( "LongHeaderExample", Long.MAX_VALUE, INT64_SCHEMA );
+		headers.add( "FloatHeaderExample", Float.MAX_VALUE, FLOAT32_SCHEMA );
+		headers.add( "DoubleHeaderExample", Double.MAX_VALUE, FLOAT64_SCHEMA );
+		headers.add( "BooleanHeaderExample", true, BOOLEAN_SCHEMA );
+		headers.add( "StringHeaderExample", "This is a test", STRING_SCHEMA );
+		headers.add( "BytesHeaderExample", exampleByteArray, BYTES_SCHEMA );
+		headers.add( "MapHeaderExample", exampleMap, map( STRING_SCHEMA, STRING_SCHEMA ) );
+		headers.add( "StructHeaderExample", exampleStruct, exampleStruct.schema() );
+
+		List<SinkRecord> records = new LinkedList<>();
+		records.add( createSinkRecord( 0, 0, key, payload, headers ) );
+		runSink( configuration, records, 1 );
+
+		final Message[] messages = broker.getDestination( new ActiveMQQueue( jmsQueue() ) ).browse();
+		Assert.assertEquals( 1, messages.length );
+		final ActiveMQTextMessage message = (ActiveMQTextMessage) messages[0];
+		Assert.assertEquals( key, message.getProperty( "KafkaKey" ) );
+		Assert.assertEquals( payload, message.getText() );
+		Assert.assertEquals( kafkaTopic(), message.getProperty( "KafkaTopic" ) );
+		Assert.assertNotNull( message.getProperty( "KafkaPartition" ) );
+		Assert.assertNotNull( message.getProperty( "KafkaOffset" ) );
+
+		Assert.assertEquals( Byte.MAX_VALUE, message.getByteProperty( "ByteHeaderExample" ) );
+		Assert.assertEquals( Short.MAX_VALUE, message.getShortProperty( "ShortHeaderExample" ) );
+		Assert.assertEquals( Long.MAX_VALUE, message.getLongProperty( "LongHeaderExample" ) );
+		Assert.assertEquals( Float.MAX_VALUE, message.getFloatProperty( "FloatHeaderExample" ), 0.0 );
+		Assert.assertEquals( Double.MAX_VALUE, message.getDoubleProperty( "DoubleHeaderExample" ), 0.0 );
+		Assert.assertTrue( message.getBooleanProperty( "BooleanHeaderExample" ) );
+		Assert.assertEquals( "This is a test", message.getStringProperty( "StringHeaderExample" ) );
+		Assert.assertEquals( exampleByteArray.toString(), message.getStringProperty( "BytesHeaderExample" ) );
+		Assert.assertEquals( exampleMap.toString(), message.getStringProperty( "MapHeaderExample" ) );
+		Assert.assertEquals( exampleStruct.toString(), message.getStringProperty( "StructHeaderExample" ) );
 	}
 
 	@Test
@@ -144,8 +222,12 @@ public class SinkQueueTest extends BaseSinkTest {
 		return task;
 	}
 
+	private SinkRecord createSinkRecord(int partition, long offset, Object key, Object value, Iterable<Header> headers) {
+		return new SinkRecord( kafkaTopic(), partition, null, key, null, value, offset, System.currentTimeMillis(), TimestampType.CREATE_TIME, headers);
+	}
+
 	private SinkRecord createSinkRecord(int partition, long offset, Object key, Object value) {
-		return new SinkRecord( kafkaTopic(), partition, null, key, null, value, offset, System.currentTimeMillis(), TimestampType.CREATE_TIME );
+		return createSinkRecord( partition, offset, key, value, null );
 	}
 
 	@Test

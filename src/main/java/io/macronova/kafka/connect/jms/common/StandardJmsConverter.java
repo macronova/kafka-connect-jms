@@ -31,6 +31,7 @@ import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.header.Header;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.storage.Converter;
 import io.macronova.kafka.connect.jms.domain.JmsMessage;
@@ -78,6 +79,8 @@ public class StandardJmsConverter implements JmsConverter {
 			throw new UnsupportedOperationException( "Unsupported output format: " + outputFormat + "." );
 		}
 		addCommonProperties( message, record );
+		addCustomPropertiesFromRecordHeaders( message, record );
+
 		return message;
 	}
 
@@ -155,35 +158,45 @@ public class StandardJmsConverter implements JmsConverter {
 
 	private void addCommonProperties(Message message, SinkRecord record) throws JMSException {
 		final Object key = record.key();
-		if ( key instanceof Byte ) {
-			message.setByteProperty( "KafkaKey", (Byte) key );
-		}
-		else if ( key instanceof Short ) {
-			message.setShortProperty( "KafkaKey", (Short) key );
-		}
-		else if ( key instanceof Integer ) {
-			message.setIntProperty( "KafkaKey", (Integer) key );
-		}
-		else if ( key instanceof Long ) {
-			message.setLongProperty( "KafkaKey", (Long) key );
-		}
-		else if ( key instanceof Float ) {
-			message.setFloatProperty( "KafkaKey", (Float) key );
-		}
-		else if ( key instanceof Double ) {
-			message.setDoubleProperty( "KafkaKey", (Double) key );
-		}
-		else if ( key instanceof Boolean ) {
-			message.setBooleanProperty( "KafkaKey", (Boolean) key );
-		}
-		else if ( key != null ) {
-			message.setStringProperty( "KafkaKey", key.toString() );
-		}
+		setMessageProperty( message, "KafkaKey", key );
 		message.setStringProperty( "KafkaTopic", record.topic() );
 		message.setIntProperty( "KafkaPartition", record.kafkaPartition() );
 		message.setLongProperty( "KafkaOffset", record.kafkaOffset() );
 		if ( ! TimestampType.NO_TIMESTAMP_TYPE.equals( record.timestampType() ) ) {
 			message.setLongProperty( "KafkaTimestamp", record.timestamp() );
+		}
+	}
+
+	private void addCustomPropertiesFromRecordHeaders(Message message, SinkRecord record) throws JMSException {
+		for ( Header header : record.headers() ) {
+			setMessageProperty( message, header.key(), header.value() );
+		}
+	}
+
+	private void setMessageProperty(Message message, String propertyName, Object propertyValue) throws JMSException {
+		if ( propertyValue instanceof Byte ) {
+			message.setByteProperty( propertyName, (Byte) propertyValue );
+		}
+		else if ( propertyValue instanceof Short ) {
+			message.setShortProperty( propertyName, (Short) propertyValue );
+		}
+		else if ( propertyValue instanceof Integer ) {
+			message.setIntProperty( propertyName, (Integer) propertyValue );
+		}
+		else if ( propertyValue instanceof Long ) {
+			message.setLongProperty( propertyName, (Long) propertyValue );
+		}
+		else if ( propertyValue instanceof Float ) {
+			message.setFloatProperty( propertyName, (Float) propertyValue );
+		}
+		else if ( propertyValue instanceof Double ) {
+			message.setDoubleProperty( propertyName, (Double) propertyValue );
+		}
+		else if ( propertyValue instanceof Boolean ) {
+			message.setBooleanProperty( propertyName, (Boolean) propertyValue );
+		}
+		else if ( propertyValue != null ) {
+			message.setStringProperty( propertyName, propertyValue.toString() );
 		}
 	}
 

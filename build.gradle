@@ -10,7 +10,7 @@ apply plugin: 'idea'
 apply plugin: 'jacoco'
 
 group = 'io.macronova.kafka'
-version = '1.0.0'
+version = '2.0.0'
 
 sourceCompatibility = '1.8'
 targetCompatibility = '1.8'
@@ -30,6 +30,10 @@ task sourcesJar(type: Jar, dependsOn: classes) {
 task javadocJar(type: Jar, dependsOn: javadoc) {
 	classifier = 'javadoc'
 	from javadoc.destinationDir
+}
+
+jacoco {
+    toolVersion = "0.8.6"
 }
 
 jacocoTestReport {
@@ -125,12 +129,12 @@ dependencies {
 	compileOnly 'org.apache.kafka:connect-api:1.1.0'
 	compileOnly 'org.apache.kafka:connect-json:1.1.0' // Convert Kafka Connect data to JSON format.
 	compileOnly 'io.confluent:kafka-connect-avro-converter:5.0.0' // Convert Kafka Connect data to Apache Avro format.
-	compile 'javax.jms:javax.jms-api:2.0'
+	compile 'jakarta.jms:jakarta.jms-api:3.1.0'
 
 	testCompile 'junit:junit:4.12'
 	testCompile 'org.apache.kafka:connect-api:1.1.0'
 	testCompile 'org.apache.kafka:connect-json:1.1.0'
-	testCompile 'org.apache.activemq:activemq-broker:5.15.4'
+	testCompile 'org.apache.activemq:activemq-broker:6.1.2'
 }
 
 processResources {

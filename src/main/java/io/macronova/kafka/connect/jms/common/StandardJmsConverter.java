@@ -18,12 +18,12 @@ package io.macronova.kafka.connect.jms.common;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
-import javax.jms.BytesMessage;
-import javax.jms.JMSException;
-import javax.jms.MapMessage;
-import javax.jms.Message;
-import javax.jms.ObjectMessage;
-import javax.jms.Session;
+import jakarta.jms.BytesMessage;
+import jakarta.jms.JMSException;
+import jakarta.jms.MapMessage;
+import jakarta.jms.Message;
+import jakarta.jms.ObjectMessage;
+import jakarta.jms.Session;
 
 import io.confluent.connect.avro.AvroConverter;
 import io.macronova.kafka.connect.jms.sink.JmsSinkConnectorConfig;

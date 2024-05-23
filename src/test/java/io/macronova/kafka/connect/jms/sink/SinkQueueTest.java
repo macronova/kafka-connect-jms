@@ -22,8 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import javax.jms.JMSException;
-import javax.jms.Session;
+import jakarta.jms.JMSException;
+import jakarta.jms.Session;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -166,7 +166,7 @@ public class SinkQueueTest extends BaseSinkTest {
 		final JmsSinkTask task = startRetryTask( configuration );
 		task.setConverter( new StandardJmsConverter() {
 			@Override
-			public javax.jms.Message recordToMessage(Session session, SinkRecord record) throws JMSException {
+			public jakarta.jms.Message recordToMessage(Session session, SinkRecord record) throws JMSException {
 				throw new RuntimeException( "Failed!" );
 			}
 		} );
@@ -187,7 +187,7 @@ public class SinkQueueTest extends BaseSinkTest {
 		final int failMessageSeq = 2;
 		final JmsConverter failingConverter = new StandardJmsConverter() {
 			@Override
-			public javax.jms.Message recordToMessage(Session session, SinkRecord record) throws JMSException {
+			public jakarta.jms.Message recordToMessage(Session session, SinkRecord record) throws JMSException {
 				if ( counter.incrementAndGet() == failMessageSeq ) {
 					// Fail while publishing second message.
 					// As a result non of messages should be available for consumers.

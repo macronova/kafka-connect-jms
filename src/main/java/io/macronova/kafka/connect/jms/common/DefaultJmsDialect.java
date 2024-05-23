@@ -16,7 +16,7 @@
 package io.macronova.kafka.connect.jms.common;
 
 import java.util.Map;
-import javax.jms.ConnectionFactory;
+import jakarta.jms.ConnectionFactory;
 
 /**
  * Default JMS dialect.

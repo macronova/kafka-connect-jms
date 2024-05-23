@@ -4,7 +4,7 @@ RabbitMQ dialect implementation allowing to instantiate custom connection factor
 package io.macronova.kafka.connect.jms.common;
 
 import java.util.Map;
-import javax.jms.ConnectionFactory;
+import jakarta.jms.ConnectionFactory;
 
 import com.rabbitmq.jms.admin.RMQConnectionFactory;
 

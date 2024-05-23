@@ -15,8 +15,8 @@
  */
 package io.macronova.kafka.connect.jms.domain;
 
-import javax.jms.Destination;
-import javax.jms.JMSException;
+import jakarta.jms.Destination;
+import jakarta.jms.JMSException;
 
 import io.macronova.kafka.connect.jms.util.JmsUtils;
 import org.apache.kafka.connect.data.Schema;

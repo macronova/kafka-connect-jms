@@ -17,7 +17,7 @@ package io.macronova.kafka.connect.jms;
 
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.jms.ConnectionFactory;
+import jakarta.jms.ConnectionFactory;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 import io.macronova.kafka.connect.jms.common.JmsDialect;

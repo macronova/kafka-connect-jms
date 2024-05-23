@@ -1,6 +1,6 @@
 # Kafka Connect JMS
 
-[![Build Status](https://travis-ci.org/macronova/kafka-connect-jms.svg)](https://travis-ci.org/macronova/kafka-connect-jms) [![Code Coverage](https://codecov.io/gh/macronova/kafka-connect-jms/branch/master/graph/badge.svg)](https://codecov.io/gh/macronova/kafka-connect-jms) [![Maven Central](https://img.shields.io/maven-central/v/io.macronova.kafka/kafka-connect-jms/1.svg)](http://central.maven.org/maven2/io/macronova/kafka/kafka-conect-jms/1.0.0)
+[![Build Status](https://travis-ci.org/macronova/kafka-connect-jms.svg)](https://travis-ci.org/macronova/kafka-connect-jms) [![Code Coverage](https://codecov.io/gh/macronova/kafka-connect-jms/branch/master/graph/badge.svg)](https://codecov.io/gh/macronova/kafka-connect-jms) [![Maven Central](https://img.shields.io/maven-central/v/io.macronova.kafka/kafka-connect-jms/1.svg)](http://central.maven.org/maven2/io/macronova/kafka/kafka-conect-jms/2.0.0)
 
 Apache Kafka JMS Connector provides sink and source capabilities to transfer messages between JMS server and Kafka brokers.
 
@@ -24,7 +24,8 @@ Apache Kafka JMS Connector provides sink and source capabilities to transfer mes
 
 1. Download latest release ZIP archive from GitHub and extract its content to temporary folder.
 2. Copy _kafka-connect-jms-${version}.jar_ with all third-party dependencies to Connect `plugin.path` directory.
-    1. Version 1.0.0 depends only on JMS 2.0 API JAR.
+    1. Version 1.0.0 depends only on Javax JMS 2.0 API JAR.
+    1. Version 2.0.0 depends only on Jakarta JMS 3.0 API JAR.
 3. Copy JMS client (including dependencies) of given JMS server to Connect `plugin.path` directory.
 3. Configure source and sink connectors according to below documentation.
 
@@ -164,7 +165,7 @@ JMS specification does not distinguish between retriable and fatal errors. Vario
 | max.retries      | Maximum number of retry attempts in case of error before failing the task.     | `10`    |
 | retry.backoff.ms | The time in milliseconds to wait following an error before next retry attempt. | `5000`  |
 
-Sink connector reestablishes connectivity with JMS server in case of issues with sending messages. Source connector tries to reconnect upon errors encountered while attempting to poll new records. Exceptions that require re-establishing server connectivity should be reported to `javax.jms.ExceptionListener` by JMS provider. To alter described behavior, implement [custom JMS dialect](#custom-jms-dialect).
+Sink connector reestablishes connectivity with JMS server in case of issues with sending messages. Source connector tries to reconnect upon errors encountered while attempting to poll new records. Exceptions that require re-establishing server connectivity should be reported to `jakarta.jms.ExceptionListener` by JMS provider. To alter described behavior, implement [custom JMS dialect](#custom-jms-dialect).
 
 Users may disable retry logic by setting `max.retries = 0`.
 
@@ -214,7 +215,7 @@ public interface JmsConverter {
 
 Various JMS servers, that do not provide JNDI service, may require instantiation of connection factory object in different ways. Two possible solutions:
 * Leverage filesystem JNDI service. Typical workaround to access IBM MQ, see _examples/ibmmq_ folder.
-* Implement custom JMS dialect and link it via `jms.dialect.class` property. JMS dialect enables users to create `javax.jms.ConnectionFactory` object themselves. Review _examples/rabbitmq_ folder.
+* Implement custom JMS dialect and link it via `jms.dialect.class` property. JMS dialect enables users to create `jakarta.jms.ConnectionFactory` object themselves. Review _examples/rabbitmq_ folder.
 
 ```java
 /**

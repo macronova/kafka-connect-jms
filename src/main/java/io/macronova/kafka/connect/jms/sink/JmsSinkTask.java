@@ -18,9 +18,9 @@ package io.macronova.kafka.connect.jms.sink;
 import java.util.Collection;
 import java.util.Map;
 
-import javax.jms.Destination;
-import javax.jms.MessageProducer;
-import javax.jms.Session;
+import jakarta.jms.Destination;
+import jakarta.jms.MessageProducer;
+import jakarta.jms.Session;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

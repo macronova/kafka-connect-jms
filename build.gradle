@@ -60,48 +60,61 @@ ext.pinTestRuntime = { Configuration cfg, String kafkaVersion, String activeMqVe
 	cfg.exclude group: 'at.yawk.lz4', module: 'lz4-java'
 }
 
-// ActiveMQ 5.19 needs Java 11 or newer; Java 8 can only run the old 5.15 broker (test scope only).
-def activeMqFor = { int jdk -> jdk >= 11 ? '5.19.12' : '5.15.4' }
-
-pinTestRuntime( configurations.testRuntimeClasspath, '3.9.2', activeMqFor( 17 ) )
-
-// Run the unit tests against several Kafka Connect versions and JDKs.
-// Kafka 4.x requires Java 17 or newer; Kafka 3.9 runs on Java 8 and newer.
-// Run everything with: ./gradlew testMatrix
-def kafkaMatrix = [
-		'3.9.2': [ 8, 17, 21, 25 ],
-		'4.4.0': [ 17, 21, 25 ]
-]
-def testMatrix = tasks.register( 'testMatrix' ) {
-	group = 'verification'
-	description = 'Runs the unit tests for every Kafka version / JDK combination.'
-}
-kafkaMatrix.each { kafkaVersion, jdks ->
-	jdks.each { jdk ->
-		def name = "testKafka${kafkaVersion.replace( '.', '_' )}Java${jdk}"
-		def kafkaClasspath = configurations.create( "${name}RuntimeClasspath" ) {
-			canBeConsumed = false
-			canBeResolved = true
-			extendsFrom configurations.testImplementation, configurations.testRuntimeOnly
-			attributes {
-				attribute( Usage.USAGE_ATTRIBUTE, objects.named( Usage, Usage.JAVA_RUNTIME ) )
-			}
-		}
-		pinTestRuntime( kafkaClasspath, kafkaVersion, activeMqFor( jdk ) )
-		def matrixTask = tasks.register( name, Test ) {
-			group = 'verification'
-			description = "Unit tests against Kafka Connect ${kafkaVersion} on Java ${jdk}."
-			useJUnit()
-			testClassesDirs = sourceSets.test.output.classesDirs
-			classpath = files( sourceSets.test.output, sourceSets.main.output ) + kafkaClasspath
-			javaLauncher = javaToolchains.launcherFor {
-				languageVersion = JavaLanguageVersion.of( jdk )
-			}
-			reports.html.outputLocation = layout.buildDirectory.dir( "reports/tests/${name}" )
-			reports.junitXml.outputLocation = layout.buildDirectory.dir( "test-results/${name}" )
-		}
-		testMatrix.configure { dependsOn matrixTask }
+// Registers one Test task per Kafka version / JDK combination for a variant of the connector, plus an aggregate task.
+//   variant:      prefix of the task names, e.g. 'javaee'
+//   mainSet / testSet: the source sets holding the connector and its tests
+//   baseClasspath: a configuration holding the test dependencies to start from
+//   kafkaMatrix:  [ kafkaVersion: [ jdk, ... ] ]
+//   activeMqFor:  closure mapping a JDK to the ActiveMQ version to run the tests against
+ext.registerTestMatrix = { String variant, SourceSet mainSet, SourceSet testSet, Configuration baseClasspath,
+		Map<String, List<Integer>> kafkaMatrix, Closure<String> activeMqFor ->
+	def aggregate = tasks.register( "test${variant.capitalize()}Matrix" ) {
+		group = 'verification'
+		description = "Runs the ${variant} unit tests for every Kafka version / JDK combination."
 	}
+	kafkaMatrix.each { kafkaVersion, jdks ->
+		jdks.each { jdk ->
+			def name = "test${variant.capitalize()}Kafka${kafkaVersion.replace( '.', '_' )}Java${jdk}"
+			def classpathConfig = configurations.create( "${name}RuntimeClasspath" ) {
+				canBeConsumed = false
+				canBeResolved = true
+				extendsFrom baseClasspath
+				attributes {
+					attribute( Usage.USAGE_ATTRIBUTE, objects.named( Usage, Usage.JAVA_RUNTIME ) )
+				}
+			}
+			pinTestRuntime( classpathConfig, kafkaVersion, activeMqFor( jdk ) )
+			def matrixTask = tasks.register( name, Test ) {
+				group = 'verification'
+				description = "${variant} unit tests against Kafka Connect ${kafkaVersion} on Java ${jdk}."
+				useJUnit()
+				testClassesDirs = testSet.output.classesDirs
+				classpath = files( testSet.output, mainSet.output ) + classpathConfig
+				javaLauncher = javaToolchains.launcherFor {
+					languageVersion = JavaLanguageVersion.of( jdk )
+				}
+				reports.html.outputLocation = layout.buildDirectory.dir( "reports/tests/${name}" )
+				reports.junitXml.outputLocation = layout.buildDirectory.dir( "test-results/${name}" )
+			}
+			aggregate.configure { dependsOn matrixTask }
+		}
+	}
+	return aggregate
+}
+
+// Kafka 4.x requires Java 17 or newer; Kafka 3.9 runs on Java 8 and newer.
+// ActiveMQ 5.19 needs Java 11 or newer; Java 8 can only run the old 5.15 broker (test scope only).
+pinTestRuntime( configurations.testRuntimeClasspath, '3.9.2', '5.19.12' )
+def javaeeMatrix = registerTestMatrix(
+		'javaee', sourceSets.main, sourceSets.test, configurations.testRuntimeClasspath,
+		[ '3.9.2': [ 8, 17, 21, 25 ], '4.4.0': [ 17, 21, 25 ] ], { int jdk -> jdk >= 11 ? '5.19.12' : '5.15.4' }
+)
+
+// Run everything with: ./gradlew testMatrix
+tasks.register( 'testMatrix' ) {
+	group = 'verification'
+	description = 'Runs the unit tests of every variant for every Kafka version / JDK combination.'
+	dependsOn javaeeMatrix
 }
 
 jacocoTestReport {
@@ -206,6 +219,7 @@ dependencies {
 	testImplementation 'org.apache.kafka:connect-api:2.4.0'
 	testImplementation 'org.apache.kafka:connect-json:2.4.0'
 	testImplementation 'org.apache.activemq:activemq-broker:5.15.4'
+	testRuntimeOnly 'org.slf4j:slf4j-simple:2.0.17'
 }
 
 processResources {
@@ -220,3 +234,4 @@ tasks.register( 'zip', Zip ) {
 	from configurations.runtimeClasspath
 	into( project.name + '-' + project.version )
 }
+

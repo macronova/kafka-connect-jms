@@ -107,11 +107,17 @@ public class SourceQueueTest extends BaseSourceTest {
 			final Map<String, String> configuration = configurationJndi();
 			configuration.put( "max.retries", "3" );
 			configuration.put( "retry.backoff.ms", "1000" );
+			configuration.put( "shutdown.timeout.ms", "100" );
 			sendMessages( new String[] { "Bye bye, JMS!", "Hello, Kafka!", "NoSQL is great..." }, false );
 			task = new JmsSourceTask();
 			task.start( configuration );
 			task.setConverter( new TestConverter( BrokerDisruption.PERMANENT, null ) ); // Permanently shutdown JMS server.
-			task.poll();
+			// The first poll may legitimately still return messages the JMS client had prefetched before it noticed the
+			// outage (they were received, so they are handed to Kafka and redelivered if acknowledging them fails).
+			// What must hold is that a permanent outage is eventually reported as a ConnectException.
+			for ( int attempt = 0; attempt < 10; ++attempt ) {
+				task.poll();
+			}
 		}
 		finally {
 			if ( task != null ) {

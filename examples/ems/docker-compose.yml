@@ -1,7 +1,7 @@
 version: '2'
 services:
   zookeeper:
-    image: confluentinc/cp-zookeeper:5.0.0
+    image: confluentinc/cp-zookeeper:7.9.11
     hostname: zookeeper
     container_name: zookeeper
     ports:
@@ -11,7 +11,7 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
 
   broker:
-    image: confluentinc/cp-enterprise-kafka:5.0.0
+    image: confluentinc/cp-kafka:7.9.11
     hostname: broker
     container_name: broker
     depends_on:
@@ -28,7 +28,7 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
   schema-registry:
-    image: confluentinc/cp-schema-registry:5.0.0
+    image: confluentinc/cp-schema-registry:7.9.11
     hostname: schema-registry
     container_name: schema-registry
     depends_on:
@@ -67,9 +67,6 @@ services:
       CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
       CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
-      CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_ZOOKEEPER_CONNECT: 'zookeeper:2181'
       CONNECT_PLUGIN_PATH: /usr/share/java
       CONNECT_LOG4J_LOGGERS: org.apache.zookeeper=ERROR,org.I0Itec.zkclient=ERROR,org.reflections=ERROR
 

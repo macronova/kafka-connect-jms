@@ -5,7 +5,7 @@ RUN mkdir /tmp/build \
 	&& unzip /tmp/kafka-connect-jms-${VERSION}.zip -d /tmp/build/ \
 	&& rm /tmp/kafka-connect-jms-${VERSION}.zip
 
-FROM confluentinc/cp-kafka-connect:5.0.0
+FROM confluentinc/cp-kafka-connect:7.9.11
 ENV VERSION 2.0.0
 ENV CLASSPATH ${CLASSPATH}:/usr/share/java/macronova-connect-jms/*
 COPY --from=builder /tmp/build/* /usr/share/java/macronova-connect-jms/

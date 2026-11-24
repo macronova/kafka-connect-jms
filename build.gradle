@@ -44,6 +44,48 @@ tasks.withType( Test ).configureEach {
 	}
 }
 
+// Run the unit tests against several Kafka Connect versions and JDKs.
+// Kafka 4.x requires Java 17 or newer; Kafka 3.9 runs on Java 8 and newer.
+// Run everything with: ./gradlew testMatrix
+def kafkaMatrix = [
+		'3.9.2': [ 8, 17, 21, 25 ]
+]
+def testMatrix = tasks.register( 'testMatrix' ) {
+	group = 'verification'
+	description = 'Runs the unit tests for every Kafka version / JDK combination.'
+}
+kafkaMatrix.each { kafkaVersion, jdks ->
+	def kafkaClasspath = configurations.create( "kafka${kafkaVersion.replace( '.', '_' )}TestRuntimeClasspath" ) {
+		canBeConsumed = false
+		canBeResolved = true
+		extendsFrom configurations.testImplementation, configurations.testRuntimeOnly
+		attributes {
+			attribute( Usage.USAGE_ATTRIBUTE, objects.named( Usage, Usage.JAVA_RUNTIME ) )
+		}
+	}
+	kafkaClasspath.resolutionStrategy.force(
+			"org.apache.kafka:connect-api:${kafkaVersion}",
+			"org.apache.kafka:connect-json:${kafkaVersion}",
+			"org.apache.kafka:kafka-clients:${kafkaVersion}"
+	)
+	jdks.each { jdk ->
+		def name = "testKafka${kafkaVersion.replace( '.', '_' )}Java${jdk}"
+		def matrixTask = tasks.register( name, Test ) {
+			group = 'verification'
+			description = "Unit tests against Kafka Connect ${kafkaVersion} on Java ${jdk}."
+			useJUnit()
+			testClassesDirs = sourceSets.test.output.classesDirs
+			classpath = files( sourceSets.test.output, sourceSets.main.output ) + kafkaClasspath
+			javaLauncher = javaToolchains.launcherFor {
+				languageVersion = JavaLanguageVersion.of( jdk )
+			}
+			reports.html.outputLocation = layout.buildDirectory.dir( "reports/tests/${name}" )
+			reports.junitXml.outputLocation = layout.buildDirectory.dir( "test-results/${name}" )
+		}
+		testMatrix.configure { dependsOn matrixTask }
+	}
+}
+
 jacocoTestReport {
 	reports {
 		xml.required = true

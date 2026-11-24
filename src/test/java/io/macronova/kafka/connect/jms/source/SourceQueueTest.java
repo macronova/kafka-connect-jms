@@ -219,6 +219,45 @@ public class SourceQueueTest extends BaseSourceTest {
 	}
 
 	/**
+	 * Two different JMS messages can be converted into records that are equal to each other. Committing the first
+	 * one must not acknowledge the second one, which has not been delivered to Kafka yet.
+	 */
+	@Test(timeout = 60000)
+	public void testEqualRecordsAreTrackedSeparately() throws Exception {
+		final Map<String, String> configuration = configurationJndi();
+		configuration.put( "shutdown.timeout.ms", "500" );
+		sendMessages( new String[] { "same", "same" }, false );
+		final JmsSourceTask task = new JmsSourceTask();
+		task.start( configuration );
+		task.setConverter( new StandardJmsConverter() {
+			@Override
+			public SourceRecord messageToRecord(Message message, String topic, Map<String, ?> sourcePartition, Map<String, ?> sourceOffset) {
+				return new SourceRecord( sourcePartition, sourceOffset, topic, null, "key", null, "value" );
+			}
+		} );
+		final List<SourceRecord> records = new java.util.ArrayList<>();
+		for ( int attempt = 0; attempt < 50 && records.size() < 2; ++attempt ) {
+			records.addAll( task.poll() );
+		}
+		Assert.assertEquals( 2, records.size() );
+		Assert.assertEquals( records.get( 0 ), records.get( 1 ) );
+		Assert.assertNotSame( records.get( 0 ), records.get( 1 ) );
+
+		task.commitRecord( records.get( 0 ), null );
+		task.poll(); // Gives the task the opportunity to acknowledge, if (wrongly) it considers everything committed.
+		Thread.sleep( 1000 );
+		Assert.assertEquals( 0L, dequeued() ); // The second record is still in flight.
+
+		task.commitRecord( records.get( 1 ), null );
+		task.stop();
+		Assert.assertEquals( 2L, dequeued() );
+	}
+
+	private long dequeued() throws Exception {
+		return broker.getDestination( new ActiveMQQueue( jmsQueue() ) ).getDestinationStatistics().getDequeues().getCount();
+	}
+
+	/**
 	 * If the worker never reports back that records were delivered, stopping the task must not block forever.
 	 * The messages must also stay on the queue (be redelivered) because they were never acknowledged.
 	 */

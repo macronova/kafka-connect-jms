@@ -16,10 +16,11 @@
 package io.macronova.kafka.connect.jms.source;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import javax.jms.Destination;
 import javax.jms.JMSException;
@@ -65,7 +66,10 @@ public class JmsSourceTask extends SourceTask {
 	private Destination destination = null;
 	private MessageConsumer consumer = null;
 
-	private Map<SourceRecord, Message> messagesToAcknowledge = new ConcurrentHashMap<>();
+	// Records are tracked by identity: SourceRecord.equals() compares by value, so two messages that convert to equal
+	// records (same key, value and offsets) would otherwise share a single entry and be acknowledged too early.
+	// Kafka Connect hands the very same instances back to commitRecord().
+	private final Map<SourceRecord, Message> messagesToAcknowledge = Collections.synchronizedMap( new IdentityHashMap<SourceRecord, Message>() );
 	private Message lastMessage = null;
 	private volatile boolean shuttingDown = false;
 
@@ -165,7 +169,7 @@ public class JmsSourceTask extends SourceTask {
 			return null;
 		}
 		final List<SourceRecord> result = new ArrayList<>( maxPollRecords );
-		final Map<SourceRecord, Message> receivedMessages = new HashMap<>();
+		final Map<SourceRecord, Message> receivedMessages = new IdentityHashMap<>();
 		int count = 0;
 		int remainingRetries = config.getInt( JmsSourceConnectorConfig.MAX_RETRIES_CONFIG );
 		Exception lastException = null;

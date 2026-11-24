@@ -1,0 +1,136 @@
+// Jakarta EE variant of the connector (jakarta.jms instead of javax.jms), for JMS providers such as ActiveMQ 6.x and
+// Artemis 2.x. It is built from exactly the same sources: the javax.jms package is rewritten to jakarta.jms at build
+// time and the result is compiled against the real Jakarta Messaging API, so mismatches are caught by the compiler.
+//
+//   ./gradlew jakartaJar zipJakarta testJakartaMatrix
+
+def jakartaGenerated = layout.buildDirectory.dir( 'generated/jakarta' )
+
+def rewrite = { String line -> line.replace( 'javax.jms', 'jakarta.jms' ) }
+
+def generateMain = tasks.register( 'generateJakartaMainSources', Sync ) {
+	from 'src/main/java'
+	into jakartaGenerated.map { it.dir( 'main/java' ) }
+	filter rewrite
+}
+def generateTest = tasks.register( 'generateJakartaTestSources', Sync ) {
+	from 'src/test/java'
+	into jakartaGenerated.map { it.dir( 'test/java' ) }
+	filter rewrite
+}
+
+sourceSets {
+	jakarta {
+		java.srcDir generateMain
+		resources.srcDir 'src/main/resources'
+	}
+	jakartaTest {
+		java.srcDir generateTest
+		compileClasspath += sourceSets.jakarta.output
+		runtimeClasspath += sourceSets.jakarta.output
+	}
+}
+
+configurations {
+	jakartaCompileOnly.extendsFrom compileOnly
+	jakartaTestImplementation.extendsFrom jakartaImplementation
+}
+
+dependencies {
+	jakartaImplementation 'jakarta.jms:jakarta.jms-api:3.1.0'
+
+	jakartaTestImplementation 'junit:junit:4.13.2'
+	jakartaTestImplementation 'org.apache.kafka:connect-api:2.4.0'
+	jakartaTestImplementation 'org.apache.kafka:connect-json:2.4.0'
+	jakartaTestImplementation 'org.apache.activemq:activemq-broker:6.4.0'
+	jakartaTestImplementation 'jakarta.jms:jakarta.jms-api:3.1.0'
+	jakartaTestImplementation 'io.confluent:kafka-connect-avro-converter:5.0.0'
+	jakartaTestRuntimeOnly 'org.slf4j:slf4j-simple:2.0.17'
+}
+
+tasks.named( 'compileJakartaJava', JavaCompile ) {
+	options.release = 11
+}
+tasks.named( 'compileJakartaTestJava', JavaCompile ) {
+	options.release = 17 // ActiveMQ 6 requires Java 17.
+}
+
+tasks.named( 'processJakartaResources', ProcessResources ) {
+	filter org.apache.tools.ant.filters.ReplaceTokens, tokens: [
+			'application.version': project.property( 'version' )
+	]
+}
+
+def jakartaJar = tasks.register( 'jakartaJar', Jar ) {
+	group = 'build'
+	description = 'Assembles the Jakarta EE variant of the connector.'
+	archiveBaseName = "${project.name}-jakarta"
+	from sourceSets.jakarta.output
+}
+tasks.named( 'assemble' ) {
+	dependsOn jakartaJar
+}
+
+tasks.register( 'zipJakarta', Zip ) {
+	group = 'distribution'
+	description = 'Archive with the Jakarta EE connector JAR and its runtime dependencies.'
+	archiveBaseName = "${project.name}-jakarta"
+	from jakartaJar
+	from configurations.jakartaRuntimeClasspath
+	into( project.name + '-jakarta-' + project.version )
+}
+
+// The default test run, using ActiveMQ 6 on the JDK that runs Gradle.
+pinTestRuntime( configurations.jakartaTestRuntimeClasspath, '3.9.2', '6.4.0' )
+tasks.register( 'testJakarta', Test ) {
+	group = 'verification'
+	description = 'Runs the Jakarta EE unit tests.'
+	useJUnit()
+	testClassesDirs = sourceSets.jakartaTest.output.classesDirs
+	classpath = sourceSets.jakartaTest.runtimeClasspath
+}
+tasks.named( 'check' ) {
+	dependsOn 'testJakarta'
+}
+
+def jakartaMatrix = registerTestMatrix(
+		'jakarta', sourceSets.jakarta, sourceSets.jakartaTest, configurations.jakartaTestRuntimeClasspath,
+		[ '3.9.2': [ 17, 21, 25 ], '4.4.0': [ 17, 21, 25 ] ], { int jdk -> '6.4.0' }
+)
+tasks.named( 'testMatrix' ) {
+	dependsOn jakartaMatrix
+}
+
+// Publish the Jakarta variant as its own artifact (kafka-connect-jms-jakarta), so that its POM depends on
+// jakarta.jms-api rather than javax.jms-api.
+publishing {
+	publications {
+		mavenJakarta( MavenPublication ) {
+			artifactId = "${project.name}-jakarta"
+			artifact jakartaJar
+			artifact( tasks.register( 'jakartaSourcesJar', Jar ) {
+				archiveBaseName = "${project.name}-jakarta"
+				archiveClassifier = 'sources'
+				from sourceSets.jakarta.allSource
+			} )
+			pom {
+				name = 'Kafka Connect JMS (Jakarta EE)'
+				description = 'Sink and source JMS connector for Kafka Connect, for Jakarta Messaging providers.'
+				url = 'https://github.com/macronova/kafka-connect-jms'
+				licenses {
+					license {
+						name = 'The Apache License, Version 2.0'
+						url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+					}
+				}
+				withXml {
+					def dependency = asNode().appendNode( 'dependencies' ).appendNode( 'dependency' )
+					dependency.appendNode( 'groupId', 'jakarta.jms' )
+					dependency.appendNode( 'artifactId', 'jakarta.jms-api' )
+					dependency.appendNode( 'version', '3.1.0' )
+					dependency.appendNode( 'scope', 'compile' )
+				}
+			}
+		}
+	}
+}

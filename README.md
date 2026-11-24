@@ -1,6 +1,6 @@
 # Kafka Connect JMS
 
-[![Build Status](https://travis-ci.org/macronova/kafka-connect-jms.svg)](https://travis-ci.org/macronova/kafka-connect-jms) [![Code Coverage](https://codecov.io/gh/macronova/kafka-connect-jms/branch/master/graph/badge.svg)](https://codecov.io/gh/macronova/kafka-connect-jms) [![Maven Central](https://img.shields.io/maven-central/v/io.macronova.kafka/kafka-connect-jms/1.svg)](http://central.maven.org/maven2/io/macronova/kafka/kafka-conect-jms/1.0.0)
+[![CI](https://github.com/FireBurn/kafka-connect-jms/actions/workflows/ci.yml/badge.svg)](https://github.com/FireBurn/kafka-connect-jms/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/FireBurn/kafka-connect-jms)](https://github.com/FireBurn/kafka-connect-jms/releases) [Changelog](CHANGELOG.md)
 
 Apache Kafka JMS Connector provides sink and source capabilities to transfer messages between JMS server and Kafka brokers.
 
@@ -18,19 +18,54 @@ Apache Kafka JMS Connector provides sink and source capabilities to transfer mes
 - [Extensions](#extensions)
   * [Custom JMS Converter](#custom-jms-converter)
   * [Custom JMS Dialect](#custom-jms-dialect)
+- [Building](#building)
 - [Examples](#examples)
 
 ## Installation
 
 1. Download latest release ZIP archive from GitHub and extract its content to temporary folder.
-2. Copy _kafka-connect-jms-${version}.jar_ with all third-party dependencies to Connect `plugin.path` directory.
-    1. Version 1.0.0 depends only on JMS 2.0 API JAR.
+   Two variants are provided, built from the same source code:
+
+   | Archive | JMS API | Use with |
+   |---------|---------|----------|
+   | `kafka-connect-jms-${version}.zip` | `javax.jms` (JMS 2.0) | ActiveMQ 5.x, IBM MQ (JMS 2.0 client), TIBCO EMS, RabbitMQ, Solace and other `javax.jms` clients |
+   | `kafka-connect-jms-jakarta-${version}.zip` | `jakarta.jms` (Jakarta Messaging 3.1) | ActiveMQ 6.x, Artemis 2.x and other `jakarta.jms` clients |
+
+   Pick the one matching the JMS client you install in step 3; they cannot be mixed.
+2. Copy the connector JAR with all third-party dependencies to Connect `plugin.path` directory.
+    1. The connector depends only on the JMS API JAR included in the archive.
 3. Copy JMS client (including dependencies) of given JMS server to Connect `plugin.path` directory.
-3. Configure source and sink connectors according to below documentation.
+4. Configure source and sink connectors according to below documentation.
+
+### Compatibility
+
+The connector is tested against Kafka Connect 3.9 (Java 8, 17, 21, 25) and 4.4 (Java 17, 21, 25), with ActiveMQ 5.19 (`javax.jms`)
+and ActiveMQ 6.4 (`jakarta.jms`). Kafka Connect 4.0 and later requires Java 17.
+
+Kafka Connect 2.4 or newer is required, as the source connector acknowledges JMS messages in
+`SourceTask.commitRecord(SourceRecord, RecordMetadata)`. Version 1.0.0 relied on the single-argument variant that Kafka 4.0
+removed, so it never acknowledged messages on Kafka Connect 4.x. Connectors are also registered for `ServiceLoader` discovery,
+the default `plugin.discovery` mode of Kafka Connect 4.
+
+The `avro` output format of the sink uses Confluent's `AvroConverter`, which must be available to the worker (it is part of
+the Confluent Platform images); it is tested with Confluent Platform 7.9 (Kafka 3.9) and 8.4 (Kafka 4.4).
+
+## Building
+
+```bash
+$ ./gradlew clean build zip zipJakarta   # JARs in build/libs, archives in build/distributions
+$ ./gradlew testMatrix                   # unit tests for every Kafka version / JDK combination (needs JDKs 8, 17, 21 and 25)
+```
+
+The Jakarta variant is generated from the same sources: `javax.jms` is rewritten to `jakarta.jms` at build time (see _gradle/jakarta.gradle_).
 
 ## JMS Interaction
 
-Kafka sink connectors are supposed to push batch of messages to the target system. To minimize number of duplicates in case of transient failures, JMS connector leverages transactional JMS session while publishing messages. On the other hand, to prevent message loss while receiving it from JMS server, connector takes advantage of client acknowledgement feature. JMS message is confirmed as processed only after successful write to Kafka log.
+Kafka sink connectors are supposed to push batch of messages to the target system. To minimize number of duplicates in case of transient failures, JMS connector leverages transactional JMS session while publishing messages.
+
+On the other hand, to prevent message loss while receiving it from JMS server, the source connector takes advantage of the client acknowledgement feature. A JMS message is confirmed as processed only after the record created from it has been written to the Kafka log (Kafka Connect reports this by calling `SourceTask.commitRecord(SourceRecord, RecordMetadata)`). Delivery is therefore *at least once*: after a failure unacknowledged messages are redelivered by the JMS server.
+
+Acknowledging a JMS session confirms every message the session has received so far, so the connector acknowledges only when all messages received up to that point have been written to Kafka, and does so from the polling thread. When a task is stopped it waits for outstanding records for up to `shutdown.timeout.ms` (see [Pushing and Polling](#pushing-and-polling)); whatever is still unconfirmed after that is redelivered.
 
 ## Configuration
 
@@ -74,13 +109,14 @@ Target JMS destination should be specified using below configuration parameters.
 | jms.destination.name | JMS destination name.                      |         |
 | jms.destination.type | JMS destination type (`queue` or `topic`). | `queue` |
 
-Three parameters control JMS queue and topic polling behavior.
+Four parameters control JMS queue and topic polling behavior (source connector).
 
-| Property Name    | Description                                                           | Default |
-|------------------|-----------------------------------------------------------------------|---------|
-| poll.timeout.ms  | Maximum poll timeout for incoming JMS message.                        | `1000`  |
-| max.poll.records | Maximum number of JMS messages retrieved during every poll operation. | `100`   |
-| jms.selector     | JMS message selector.                                                 |         |
+| Property Name       | Description                                                                                                                                              | Default |
+|---------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| poll.timeout.ms     | Maximum poll timeout for incoming JMS message.                                                                                                           | `1000`  |
+| max.poll.records    | Maximum number of JMS messages retrieved during every poll operation.                                                                                    | `100`   |
+| jms.selector        | JMS message selector.                                                                                                                                    |         |
+| shutdown.timeout.ms | Maximum time to wait, when the task is stopped, for in-flight records to be written to Kafka. Messages still unconfirmed afterwards are redelivered.     | `10000` |
 
 While receiving messages from JMS topic, connector registers durable subscriber. Durable subscribers are identified by a combination of JMS client ID, subscription name and message selector. Therefore, the following properties should be always configured:
 * `jms.client.id`
@@ -172,6 +208,8 @@ Users may disable retry logic by setting `max.retries = 0`.
 
 Connector provides two SPI interfaces that can be reimplemented by users to override default behavior and better support specific JMS server.
 
+> **Note**: The interfaces use the JMS API of the variant they belong to. Implementations for the `javax.jms` connector must be compiled against `javax.jms`, and those for the Jakarta connector (`kafka-connect-jms-jakarta`) against `jakarta.jms`.
+
 ### Custom JMS Converter
 
 If none of default converters described in sections [Sink Message Conversion](#sink-message-conversion) and [Source Message Conversion](#source-message-conversion) works for your use-case, developers may define custom `JmsConverter` and link it via `jms.message.converter` property. Implementations should provide default non-argument constructor. We encourage developers to submit pull-requests and bug reports so that default implementation (`StandardJmsConverter`) becomes even more generic and feature-rich.
@@ -255,7 +293,7 @@ Please review _examples_ folder which contains Docker Compose manifests demonstr
 Steps to quickly run Docker Compose setup from _examples_ directory:
 1. Build project from source code.
     ```bash
-    $ gradle clean build zip
+    $ ./gradlew clean build zip
     ```
 2. Create Docker image.
     ```bash

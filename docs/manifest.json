@@ -30,7 +30,8 @@
     "username": "macronova"
   },
   "requirements": [
-    "JMS 1.x or 2.x Server"
+    "Apache Kafka Connect 2.4 or newer (tested with 3.9 and 4.4)",
+    "JMS 1.x or 2.x server (javax.jms). Use the kafka-connect-jms-jakarta distribution from GitHub for Jakarta Messaging providers."
   ],
   "support": {
     "logo": "assets/macronova-logo.png",

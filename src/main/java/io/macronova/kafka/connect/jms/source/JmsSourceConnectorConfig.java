@@ -36,6 +36,12 @@ public class JmsSourceConnectorConfig extends BaseConnectorConfig {
 	private static final String POLL_TIMEOUT_DOC = "Maximum poll timeout for incoming message [ms.].";
 	private static final String POLL_TIMEOUT_DISPLAY = "Poll timeout";
 
+	public static final String SHUTDOWN_TIMEOUT_CONFIG = "shutdown.timeout.ms";
+	private static final long SHUTDOWN_TIMEOUT_DEFAULT = 10000L;
+	private static final String SHUTDOWN_TIMEOUT_DOC = "Maximum time to wait for in-flight messages to be acknowledged " +
+			"when the task is stopped [ms.]. Messages that are still not acknowledged afterwards are redelivered by the JMS server.";
+	private static final String SHUTDOWN_TIMEOUT_DISPLAY = "Shutdown timeout";
+
 	public static final String JMS_SELECTOR_CONFIG = "jms.selector";
 	private static final String JMS_SELECTOR_DOC = "JMS message selector.";
 	private static final String JMS_SELECTOR_DISPLAY = "Selector";
@@ -80,6 +86,10 @@ public class JmsSourceConnectorConfig extends BaseConnectorConfig {
 		config.define(
 				POLL_TIMEOUT_CONFIG, ConfigDef.Type.LONG, POLL_TIMEOUT_DEFAULT, ConfigDef.Importance.LOW,
 				POLL_TIMEOUT_DOC, JMS_GROUP, ++orderInGroup, ConfigDef.Width.SHORT, POLL_TIMEOUT_DISPLAY
+		);
+		config.define(
+				SHUTDOWN_TIMEOUT_CONFIG, ConfigDef.Type.LONG, SHUTDOWN_TIMEOUT_DEFAULT, ConfigDef.Importance.LOW,
+				SHUTDOWN_TIMEOUT_DOC, JMS_GROUP, ++orderInGroup, ConfigDef.Width.SHORT, SHUTDOWN_TIMEOUT_DISPLAY
 		);
 		config.define(
 				JMS_SUBSCRIPTION_CONFIG, ConfigDef.Type.STRING, "", ConfigDef.Importance.MEDIUM,

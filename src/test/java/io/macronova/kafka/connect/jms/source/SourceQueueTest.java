@@ -253,6 +253,85 @@ public class SourceQueueTest extends BaseSourceTest {
 		Assert.assertEquals( 2L, dequeued() );
 	}
 
+	/**
+	 * The worker commits records on the producer's callback thread, concurrently with poll(). Acknowledging a JMS
+	 * session acknowledges every message consumed so far, including one that poll() has just received but not yet
+	 * handed over to Kafka Connect. Such a message must stay unacknowledged until it has been committed itself.
+	 */
+	@Test(timeout = 60000)
+	public void testCommitDoesNotAcknowledgeMessageBeingPolled() throws Exception {
+		final Map<String, String> configuration = configurationJndi();
+		configuration.put( "max.poll.records", "1" );
+		configuration.put( "poll.timeout.ms", "5000" );
+		configuration.put( "shutdown.timeout.ms", "500" );
+		sendMessages( new String[] { "first", "second" }, false );
+
+		final java.util.concurrent.CountDownLatch secondMessageReceived = new java.util.concurrent.CountDownLatch( 1 );
+		final java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch( 1 );
+		final AtomicInteger converted = new AtomicInteger( 0 );
+		final JmsSourceTask task = new JmsSourceTask();
+		task.start( configuration );
+		task.setConverter( new StandardJmsConverter() {
+			@Override
+			public SourceRecord messageToRecord(Message message, String topic, Map<String, ?> sourcePartition, Map<String, ?> sourceOffset) throws JMSException {
+				final SourceRecord record = super.messageToRecord( message, topic, sourcePartition, sourceOffset );
+				if ( converted.incrementAndGet() == 2 ) {
+					// The session has now consumed the second message, but poll() has not returned it yet.
+					secondMessageReceived.countDown();
+					try {
+						release.await();
+					}
+					catch ( InterruptedException e ) {
+						Thread.currentThread().interrupt();
+					}
+				}
+				return record;
+			}
+		} );
+		final List<SourceRecord> first = task.poll();
+		Assert.assertEquals( 1, first.size() );
+
+		final List<SourceRecord> second = new java.util.concurrent.CopyOnWriteArrayList<>();
+		final Thread poller = new Thread( new Runnable() {
+			@Override
+			public void run() {
+				second.addAll( task.poll() );
+			}
+		} );
+		Thread committer = null;
+		try {
+			poller.start();
+			Assert.assertTrue( secondMessageReceived.await( 10, java.util.concurrent.TimeUnit.SECONDS ) );
+
+			// The worker reports the first record as delivered while the second one is being polled.
+			committer = new Thread( new Runnable() {
+				@Override
+				public void run() {
+					try {
+						task.commitRecord( first.get( 0 ), null );
+					}
+					catch ( InterruptedException e ) {
+						Thread.currentThread().interrupt();
+					}
+				}
+			} );
+			committer.start();
+			Thread.sleep( 1000 );
+			Assert.assertEquals( "Second message was acknowledged before it was delivered to Kafka.", 0L, dequeued() );
+		}
+		finally {
+			release.countDown();
+			poller.join( 10000 );
+			if ( committer != null ) {
+				committer.join( 10000 );
+			}
+		}
+		Assert.assertEquals( 1, second.size() );
+		task.commitRecord( second.get( 0 ), null );
+		task.stop();
+		Assert.assertEquals( 2L, dequeued() );
+	}
+
 	private long dequeued() throws Exception {
 		return broker.getDestination( new ActiveMQQueue( jmsQueue() ) ).getDestinationStatistics().getDequeues().getCount();
 	}

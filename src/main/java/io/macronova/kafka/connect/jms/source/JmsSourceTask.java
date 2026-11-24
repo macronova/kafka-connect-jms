@@ -16,7 +16,6 @@
 package io.macronova.kafka.connect.jms.source;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -66,11 +65,16 @@ public class JmsSourceTask extends SourceTask {
 	private Destination destination = null;
 	private MessageConsumer consumer = null;
 
+	// JMS CLIENT_ACKNOWLEDGE acknowledges *every* message the session has consumed so far, so a message may only be
+	// acknowledged when no consumed message is still waiting for Kafka. All of the following is guarded by ackLock.
+	//
 	// Records are tracked by identity: SourceRecord.equals() compares by value, so two messages that convert to equal
 	// records (same key, value and offsets) would otherwise share a single entry and be acknowledged too early.
 	// Kafka Connect hands the very same instances back to commitRecord().
-	private final Map<SourceRecord, Message> messagesToAcknowledge = Collections.synchronizedMap( new IdentityHashMap<SourceRecord, Message>() );
-	private Message lastMessage = null;
+	private final Object ackLock = new Object();
+	private final Map<SourceRecord, Message> messagesToAcknowledge = new IdentityHashMap<>();
+	// Set when the last in-flight record has been committed: the message to call acknowledge() on.
+	private Message acknowledgementDue = null;
 	private volatile boolean shuttingDown = false;
 
 	@Override
@@ -168,12 +172,13 @@ public class JmsSourceTask extends SourceTask {
 			// Different thread requested connector to shut down. Do not try to poll messages any more.
 			return null;
 		}
+		// Everything committed by the worker since the last poll can be acknowledged now. This happens on the polling
+		// thread, which is the only one consuming messages, so no message can be consumed but not yet tracked.
+		acknowledgeIfDue();
 		final List<SourceRecord> result = new ArrayList<>( maxPollRecords );
-		final Map<SourceRecord, Message> receivedMessages = new IdentityHashMap<>();
 		int count = 0;
 		int remainingRetries = config.getInt( JmsSourceConnectorConfig.MAX_RETRIES_CONFIG );
 		Exception lastException = null;
-		Message latestMessage = null;
 		while ( count < maxPollRecords && remainingRetries >= 0 ) {
 			try {
 				if ( provider.isClosed() || session == null || consumer == null ) {
@@ -186,8 +191,8 @@ public class JmsSourceTask extends SourceTask {
 								message, topic, sourcePartition, sourceOffset
 						);
 						result.add( record );
-						receivedMessages.put( record, message );
-						latestMessage = message;
+						// Track the message immediately: from now on it counts as consumed by the session.
+						registerInFlight( record, message );
 					}
 					++count;
 					remainingRetries = config.getInt( JmsSourceConnectorConfig.MAX_RETRIES_CONFIG );
@@ -206,9 +211,8 @@ public class JmsSourceTask extends SourceTask {
 				// Clear state. All messages we picked up from JMS provider will be redelivered, because they
 				// have not been acknowledged.
 				lastException = e;
-				latestMessage = null;
 				count = 0;
-				receivedMessages.clear();
+				unregisterInFlight( result );
 				result.clear();
 
 				--remainingRetries;
@@ -229,11 +233,49 @@ public class JmsSourceTask extends SourceTask {
 					"': " + lastException.getMessage() + ".", lastException
 			);
 		}
-		messagesToAcknowledge.putAll( receivedMessages );
-		if ( ! receivedMessages.isEmpty() ) {
-			lastMessage = latestMessage;
-		}
 		return result;
+	}
+
+	private void registerInFlight(SourceRecord record, Message message) {
+		synchronized ( ackLock ) {
+			messagesToAcknowledge.put( record, message );
+		}
+	}
+
+	private void unregisterInFlight(List<SourceRecord> records) {
+		synchronized ( ackLock ) {
+			for ( SourceRecord record : records ) {
+				messagesToAcknowledge.remove( record );
+			}
+		}
+	}
+
+	/**
+	 * Acknowledges the JMS session if every message consumed so far has been committed by Kafka Connect.
+	 * Must only be invoked from the thread that consumes messages (or when that thread is stopped).
+	 */
+	private void acknowledgeIfDue() {
+		final Message message;
+		synchronized ( ackLock ) {
+			if ( acknowledgementDue == null || ! messagesToAcknowledge.isEmpty() ) {
+				return;
+			}
+			message = acknowledgementDue;
+			acknowledgementDue = null;
+		}
+		try {
+			message.acknowledge();
+		}
+		catch ( Exception e ) {
+			// Ignore. Cannot do anything about it, message will be eventually redelivered. Hopefully in this
+			// case Kafka Connect has configured idempotent producer and record key has been filled in.
+			log.error(
+					"Failed to acknowledge JMS message with ID '" + JmsUtils.messageIdForLog( message ) +
+							"' received from destination '" + JmsUtils.destinationNameForLog( destination ) +
+							"'. Redelivery will take place.", e
+			);
+			recover();
+		}
 	}
 
 	private void recover() {
@@ -281,25 +323,13 @@ public class JmsSourceTask extends SourceTask {
 		// is invoked by the worker. Acknowledgement of JMS messages must therefore happen here.
 		super.commitRecord( record, metadata );
 
-		messagesToAcknowledge.remove( record );
-
-		if ( messagesToAcknowledge.isEmpty() ) {
-			try {
-				lastMessage.acknowledge();
-			}
-			catch ( Exception e ) {
-				// Ignore. Cannot do anything about it, message will be eventually redelivered. Hopefully in this
-				// case Kafka Connect has configured idempotent producer and record key has been filled in.
-				log.error(
-						"Failed to acknowledge JMS message with ID '" + JmsUtils.messageIdForLog( lastMessage ) +
-								"' received from destination '" + JmsUtils.destinationNameForLog( destination ) +
-								"'. Redelivery will take place.", e
-				);
-				recover();
-			}
-			lastMessage = null;
-			synchronized ( this ) {
-				notifyAll();
+		// Only record the fact here. This runs on the producer's callback thread, concurrently with poll(), so it must
+		// not touch the session: acknowledge() would also acknowledge messages that poll() has just received.
+		synchronized ( ackLock ) {
+			final Message message = messagesToAcknowledge.remove( record );
+			if ( message != null && messagesToAcknowledge.isEmpty() ) {
+				acknowledgementDue = message;
+				ackLock.notifyAll();
 			}
 		}
 	}
@@ -312,22 +342,26 @@ public class JmsSourceTask extends SourceTask {
 		final long timeoutMs = config != null ? config.getLong( JmsSourceConnectorConfig.SHUTDOWN_TIMEOUT_CONFIG ) : 0L;
 		final long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos( timeoutMs );
 		try {
-			while ( ! messagesToAcknowledge.isEmpty() ) {
-				final long remainingMs = TimeUnit.NANOSECONDS.toMillis( deadline - System.nanoTime() );
-				if ( remainingMs <= 0 ) {
-					log.warn(
-							"Timed out after " + timeoutMs + " ms waiting for " + messagesToAcknowledge.size() +
-							" in-flight JMS message(s) to be acknowledged. They will be redelivered."
-					);
-					break;
+			synchronized ( ackLock ) {
+				while ( ! messagesToAcknowledge.isEmpty() ) {
+					final long remainingMs = TimeUnit.NANOSECONDS.toMillis( deadline - System.nanoTime() );
+					if ( remainingMs <= 0 ) {
+						log.warn(
+								"Timed out after " + timeoutMs + " ms waiting for " + messagesToAcknowledge.size() +
+								" in-flight JMS message(s) to be acknowledged. They will be redelivered."
+						);
+						break;
+					}
+					ackLock.wait( remainingMs );
 				}
-				wait( remainingMs );
 			}
 		}
 		catch ( InterruptedException e ) {
 			log.warn( "Interrupted process waiting for all in-flight JMS messages to be acknowledged.", e );
 			Thread.currentThread().interrupt();
 		}
+		// poll() cannot be running (both methods are synchronized), so it is safe to acknowledge from here.
+		acknowledgeIfDue();
 		terminate();
 	}
 

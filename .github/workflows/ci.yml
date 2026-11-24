@@ -4,7 +4,7 @@ name: CI
 # The full Kafka version / JDK matrix is much slower, so it only runs on demand and once a week.
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
   workflow_dispatch:
     inputs:

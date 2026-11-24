@@ -1,0 +1,54 @@
+name: Release
+
+# Push a tag such as v2.0.0 to build the connector and publish a GitHub Release with the artifacts:
+#   git tag v2.0.0 && git push origin v2.0.0
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Check that the tag matches the project version
+        run: |
+          version="$(./gradlew -q properties --property version | sed -n 's/^version: //p')"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match project version ${version}" >&2
+            exit 1
+          fi
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+
+      # Runs the unit tests of both variants; the full matrix is run by the CI workflow.
+      - name: Build
+        run: ./gradlew build zip zipJakarta
+
+      - name: Collect release files
+        run: |
+          mkdir release
+          cp build/libs/kafka-connect-jms-${VERSION}.jar \
+             build/libs/kafka-connect-jms-${VERSION}-sources.jar \
+             build/libs/kafka-connect-jms-${VERSION}-javadoc.jar \
+             build/libs/kafka-connect-jms-jakarta-${VERSION}.jar \
+             build/distributions/kafka-connect-jms-${VERSION}.zip \
+             build/distributions/kafka-connect-jms-jakarta-${VERSION}.zip \
+             release/
+          (cd release && sha256sum * > SHA256SUMS)
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" release/* --title "${GITHUB_REF_NAME}" --generate-notes --verify-tag

@@ -1,0 +1,78 @@
+name: CI
+
+# Pushes and pull requests run the quick build (unit tests of both variants on one JDK).
+# The full Kafka version / JDK matrix is much slower, so it only runs on demand and once a week.
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      matrix:
+        description: 'Run the full Kafka version / JDK test matrix'
+        type: boolean
+        default: true
+  schedule:
+    - cron: '0 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and test
+        run: ./gradlew build zip zipJakarta
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: |
+            build/libs/*.jar
+            build/distributions/*.zip
+
+  matrix:
+    # Only for scheduled runs and when requested manually.
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.matrix)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      # Gradle runs on the first JDK listed; the others are discovered as toolchains for the test tasks.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            8
+            21
+            25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Test matrix
+        run: >
+          ./gradlew testMatrix --continue
+          -Dorg.gradle.java.installations.fromEnv=JAVA_HOME_8_X64,JAVA_HOME_17_X64,JAVA_HOME_21_X64,JAVA_HOME_25_X64
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-reports
+          path: build/reports/tests

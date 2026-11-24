@@ -44,6 +44,7 @@ dependencies {
 	jakartaTestImplementation 'org.apache.kafka:connect-json:2.4.0'
 	jakartaTestImplementation 'org.apache.activemq:activemq-broker:6.4.0'
 	jakartaTestImplementation 'jakarta.jms:jakarta.jms-api:3.1.0'
+	jakartaTestImplementation 'io.confluent:kafka-connect-avro-converter:5.0.0'
 	jakartaTestRuntimeOnly 'org.slf4j:slf4j-simple:2.0.17'
 }
 

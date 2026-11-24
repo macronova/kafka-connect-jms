@@ -53,8 +53,19 @@ ext.pinTestRuntime = { Configuration cfg, String kafkaVersion, String activeMqVe
 			"org.apache.kafka:kafka-clients:${kafkaVersion}",
 			"org.apache.activemq:activemq-broker:${activeMqVersion}",
 			"org.apache.activemq:activemq-client:${activeMqVersion}",
-			'org.xerial.snappy:snappy-java:1.1.10.12'
+			'org.xerial.snappy:snappy-java:1.1.10.12',
+			'com.google.guava:guava:33.8.0-jre',
+			'org.apache.commons:commons-lang3:3.22.0'
 	)
+	// Confluent's Avro converter (used for the 'avro' output format) must match the Kafka version: Confluent Platform
+	// 7.9 is based on Kafka 3.9 and 8.x on Kafka 4.x. The kafka-* and common-* artifacts share that version number.
+	def confluentVersion = kafkaVersion.startsWith( '3.' ) ? '7.9.11' : '8.4.1'
+	cfg.resolutionStrategy.eachDependency { details ->
+		if ( details.requested.group == 'io.confluent' &&
+				( details.requested.name.startsWith( 'kafka-' ) || details.requested.name.startsWith( 'common-' ) ) ) {
+			details.useVersion( confluentVersion )
+		}
+	}
 	// lz4-java has known vulnerabilities in every release and the tests never use LZ4 compression.
 	cfg.exclude group: 'org.lz4', module: 'lz4-java'
 	cfg.exclude group: 'at.yawk.lz4', module: 'lz4-java'
@@ -219,6 +230,7 @@ dependencies {
 	testImplementation 'org.apache.kafka:connect-api:2.4.0'
 	testImplementation 'org.apache.kafka:connect-json:2.4.0'
 	testImplementation 'org.apache.activemq:activemq-broker:5.15.4'
+	testImplementation 'io.confluent:kafka-connect-avro-converter:5.0.0'
 	testRuntimeOnly 'org.slf4j:slf4j-simple:2.0.17'
 }
 

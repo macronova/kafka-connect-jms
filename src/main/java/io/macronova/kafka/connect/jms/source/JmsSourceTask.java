@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import javax.jms.Destination;
 import javax.jms.JMSException;
 import javax.jms.Message;
@@ -299,14 +300,26 @@ public class JmsSourceTask extends SourceTask {
 	@Override
 	public synchronized void stop() {
 		shuttingDown = true;
+		// Wait for all received JMS messages to be acknowledged, but not forever: if the acknowledgements never
+		// arrive (e.g. the worker gave up on the records) the task would otherwise block shutdown and rebalances.
+		final long timeoutMs = config != null ? config.getLong( JmsSourceConnectorConfig.SHUTDOWN_TIMEOUT_CONFIG ) : 0L;
+		final long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos( timeoutMs );
 		try {
-			// Waiting for all received JMS message to be acknowledged.
 			while ( ! messagesToAcknowledge.isEmpty() ) {
-				wait();
+				final long remainingMs = TimeUnit.NANOSECONDS.toMillis( deadline - System.nanoTime() );
+				if ( remainingMs <= 0 ) {
+					log.warn(
+							"Timed out after " + timeoutMs + " ms waiting for " + messagesToAcknowledge.size() +
+							" in-flight JMS message(s) to be acknowledged. They will be redelivered."
+					);
+					break;
+				}
+				wait( remainingMs );
 			}
 		}
 		catch ( InterruptedException e ) {
 			log.warn( "Interrupted process waiting for all in-flight JMS messages to be acknowledged.", e );
+			Thread.currentThread().interrupt();
 		}
 		terminate();
 	}

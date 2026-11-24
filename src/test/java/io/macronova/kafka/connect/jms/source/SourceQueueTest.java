@@ -187,6 +187,31 @@ public class SourceQueueTest extends BaseSourceTest {
 		Assert.assertEquals( 2, redeliveryHappened ); // Two first messages have been redelivered.
 	}
 
+	/**
+	 * If the worker never reports back that records were delivered, stopping the task must not block forever.
+	 * The messages must also stay on the queue (be redelivered) because they were never acknowledged.
+	 */
+	@Test(timeout = 20000)
+	public void testStopDoesNotBlockWhenMessagesNeverAcknowledged() throws Exception {
+		final Map<String, String> configuration = configurationJndi();
+		configuration.put( "shutdown.timeout.ms", "500" );
+		sendMessages( new String[] { "Bye bye, JMS!", "Hello, Kafka!", "NoSQL is great..." }, false );
+		final JmsSourceTask task = new JmsSourceTask();
+		task.start( configuration );
+		int received = 0;
+		for ( int attempt = 0; attempt < 50 && received < 3; ++attempt ) {
+			received += task.poll().size();
+		}
+		Assert.assertEquals( 3, received );
+		final long start = System.nanoTime();
+		task.stop(); // No commitRecord() calls.
+		final long elapsedMs = ( System.nanoTime() - start ) / 1000000L;
+		Assert.assertTrue( "stop() took " + elapsedMs + " ms.", elapsedMs < 10000L );
+		Assert.assertEquals(
+				0L, broker.getDestination( new ActiveMQQueue( jmsQueue() ) ).getDestinationStatistics().getDequeues().getCount()
+		);
+	}
+
 	enum BrokerDisruption {
 		/**
 		 * Restart broker once.

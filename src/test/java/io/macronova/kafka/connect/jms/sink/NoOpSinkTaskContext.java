@@ -26,6 +26,11 @@ import org.apache.kafka.connect.sink.SinkTaskContext;
  */
 public class NoOpSinkTaskContext implements SinkTaskContext {
 	@Override
+	public Map<String, String> configs() {
+		return java.util.Collections.emptyMap();
+	}
+
+	@Override
 	public void offset(Map<TopicPartition, Long> offsets) {
 	}
 

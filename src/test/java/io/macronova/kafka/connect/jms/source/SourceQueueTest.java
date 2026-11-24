@@ -95,7 +95,7 @@ public class SourceQueueTest extends BaseSourceTest {
 		final List<SourceRecord> result = task.poll();
 		Assert.assertEquals( 2, result.size() );
 		for ( SourceRecord record : result ) {
-			task.commitRecord( record );
+			task.commitRecord( record, null );
 		}
 		task.stop();
 	}
@@ -149,7 +149,7 @@ public class SourceQueueTest extends BaseSourceTest {
 		Assert.assertTrue( CustomJmsDialect.wasExceptionReported() );
 		Assert.assertEquals( 2, result.size() );
 		for ( SourceRecord record : result ) {
-			task.commitRecord( record );
+			task.commitRecord( record, null );
 		}
 		task.stop();
 	}
@@ -191,6 +191,31 @@ public class SourceQueueTest extends BaseSourceTest {
 			}
 		}
 		Assert.assertEquals( 2, redeliveryHappened ); // Two first messages have been redelivered.
+	}
+
+	/**
+	 * Kafka Connect (4.0 and later) only calls commitRecord(SourceRecord, RecordMetadata) once the producer has
+	 * acknowledged a record. That callback must acknowledge the JMS message, otherwise it is redelivered forever.
+	 */
+	@Test(timeout = 60000)
+	public void testMessagesAcknowledgedByWorkerCallback() throws Exception {
+		final Map<String, String> configuration = configurationJndi();
+		configuration.put( "shutdown.timeout.ms", "500" );
+		sendMessages( new String[] { "Bye bye, JMS!", "Hello, Kafka!", "NoSQL is great..." }, false );
+		final JmsSourceTask task = new JmsSourceTask();
+		task.start( configuration );
+		final List<SourceRecord> records = new java.util.ArrayList<>();
+		for ( int attempt = 0; attempt < 50 && records.size() < 3; ++attempt ) {
+			records.addAll( task.poll() );
+		}
+		Assert.assertEquals( 3, records.size() );
+		for ( SourceRecord record : records ) {
+			task.commitRecord( record, null ); // This is exactly what the Connect worker invokes.
+		}
+		task.stop();
+		Assert.assertEquals(
+				3L, broker.getDestination( new ActiveMQQueue( jmsQueue() ) ).getDestinationStatistics().getDequeues().getCount()
+		);
 	}
 
 	/**

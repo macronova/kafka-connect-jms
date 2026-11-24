@@ -58,7 +58,7 @@ public abstract class BaseSourceTest extends BaseFunctionalTest {
 			}
 			// Commit received records.
 			for ( SourceRecord record : result ) {
-				task.commitRecord( record );
+				task.commitRecord( record, null );
 			}
 			task.stop();
 		}

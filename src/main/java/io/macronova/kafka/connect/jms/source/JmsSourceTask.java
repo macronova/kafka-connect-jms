@@ -39,6 +39,7 @@ import io.macronova.kafka.connect.jms.common.JmsSessionProvider;
 import io.macronova.kafka.connect.jms.util.JmsUtils;
 import io.macronova.kafka.connect.jms.util.StringUtils;
 import io.macronova.kafka.connect.jms.util.Version;
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTask;
@@ -271,8 +272,10 @@ public class JmsSourceTask extends SourceTask {
 	}
 
 	@Override
-	public void commitRecord(SourceRecord record) throws InterruptedException {
-		super.commitRecord( record );
+	public void commitRecord(SourceRecord record, RecordMetadata metadata) throws InterruptedException {
+		// Kafka Connect 4.0 removed the single-argument commitRecord(SourceRecord); only this variant (added in 2.4)
+		// is invoked by the worker. Acknowledgement of JMS messages must therefore happen here.
+		super.commitRecord( record, metadata );
 
 		messagesToAcknowledge.remove( record );
 

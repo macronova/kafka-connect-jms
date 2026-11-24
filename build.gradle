@@ -44,6 +44,27 @@ tasks.withType( Test ).configureEach {
 	}
 }
 
+// Compile against old, API-compatible "floor" versions (see dependencies below), but run the tests against
+// current, vulnerability-free releases. Nothing from the test runtime is shipped with the connector.
+ext.pinTestRuntime = { Configuration cfg, String kafkaVersion, String activeMqVersion ->
+	cfg.resolutionStrategy.force(
+			"org.apache.kafka:connect-api:${kafkaVersion}",
+			"org.apache.kafka:connect-json:${kafkaVersion}",
+			"org.apache.kafka:kafka-clients:${kafkaVersion}",
+			"org.apache.activemq:activemq-broker:${activeMqVersion}",
+			"org.apache.activemq:activemq-client:${activeMqVersion}",
+			'org.xerial.snappy:snappy-java:1.1.10.12'
+	)
+	// lz4-java has known vulnerabilities in every release and the tests never use LZ4 compression.
+	cfg.exclude group: 'org.lz4', module: 'lz4-java'
+	cfg.exclude group: 'at.yawk.lz4', module: 'lz4-java'
+}
+
+// ActiveMQ 5.19 needs Java 11 or newer; Java 8 can only run the old 5.15 broker (test scope only).
+def activeMqFor = { int jdk -> jdk >= 11 ? '5.19.12' : '5.15.4' }
+
+pinTestRuntime( configurations.testRuntimeClasspath, '3.9.2', activeMqFor( 17 ) )
+
 // Run the unit tests against several Kafka Connect versions and JDKs.
 // Kafka 4.x requires Java 17 or newer; Kafka 3.9 runs on Java 8 and newer.
 // Run everything with: ./gradlew testMatrix
@@ -55,21 +76,17 @@ def testMatrix = tasks.register( 'testMatrix' ) {
 	description = 'Runs the unit tests for every Kafka version / JDK combination.'
 }
 kafkaMatrix.each { kafkaVersion, jdks ->
-	def kafkaClasspath = configurations.create( "kafka${kafkaVersion.replace( '.', '_' )}TestRuntimeClasspath" ) {
-		canBeConsumed = false
-		canBeResolved = true
-		extendsFrom configurations.testImplementation, configurations.testRuntimeOnly
-		attributes {
-			attribute( Usage.USAGE_ATTRIBUTE, objects.named( Usage, Usage.JAVA_RUNTIME ) )
-		}
-	}
-	kafkaClasspath.resolutionStrategy.force(
-			"org.apache.kafka:connect-api:${kafkaVersion}",
-			"org.apache.kafka:connect-json:${kafkaVersion}",
-			"org.apache.kafka:kafka-clients:${kafkaVersion}"
-	)
 	jdks.each { jdk ->
 		def name = "testKafka${kafkaVersion.replace( '.', '_' )}Java${jdk}"
+		def kafkaClasspath = configurations.create( "${name}RuntimeClasspath" ) {
+			canBeConsumed = false
+			canBeResolved = true
+			extendsFrom configurations.testImplementation, configurations.testRuntimeOnly
+			attributes {
+				attribute( Usage.USAGE_ATTRIBUTE, objects.named( Usage, Usage.JAVA_RUNTIME ) )
+			}
+		}
+		pinTestRuntime( kafkaClasspath, kafkaVersion, activeMqFor( jdk ) )
 		def matrixTask = tasks.register( name, Test ) {
 			group = 'verification'
 			description = "Unit tests against Kafka Connect ${kafkaVersion} on Java ${jdk}."
@@ -182,7 +199,7 @@ dependencies {
 	compileOnly 'org.apache.kafka:connect-api:1.1.0'
 	compileOnly 'org.apache.kafka:connect-json:1.1.0' // Convert Kafka Connect data to JSON format.
 	compileOnly 'io.confluent:kafka-connect-avro-converter:5.0.0' // Convert Kafka Connect data to Apache Avro format.
-	api 'javax.jms:javax.jms-api:2.0'
+	api 'javax.jms:javax.jms-api:2.0.1'
 
 	testImplementation 'junit:junit:4.13.2'
 	testImplementation 'org.apache.kafka:connect-api:1.1.0'

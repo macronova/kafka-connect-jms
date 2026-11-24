@@ -1,6 +1,6 @@
 # Kafka Connect JMS
 
-[![Build Status](https://travis-ci.org/macronova/kafka-connect-jms.svg)](https://travis-ci.org/macronova/kafka-connect-jms) [![Code Coverage](https://codecov.io/gh/macronova/kafka-connect-jms/branch/master/graph/badge.svg)](https://codecov.io/gh/macronova/kafka-connect-jms) [![Maven Central](https://img.shields.io/maven-central/v/io.macronova.kafka/kafka-connect-jms/1.svg)](http://central.maven.org/maven2/io/macronova/kafka/kafka-conect-jms/1.0.0)
+[![CI](https://github.com/FireBurn/kafka-connect-jms/actions/workflows/ci.yml/badge.svg)](https://github.com/FireBurn/kafka-connect-jms/actions/workflows/ci.yml) [![Code Coverage](https://codecov.io/gh/macronova/kafka-connect-jms/branch/master/graph/badge.svg)](https://codecov.io/gh/macronova/kafka-connect-jms) [![Maven Central](https://img.shields.io/maven-central/v/io.macronova.kafka/kafka-connect-jms/1.svg)](http://central.maven.org/maven2/io/macronova/kafka/kafka-conect-jms/1.0.0)
 
 Apache Kafka JMS Connector provides sink and source capabilities to transfer messages between JMS server and Kafka brokers.
 

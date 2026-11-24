@@ -35,6 +35,15 @@ repositories {
 	}
 }
 
+tasks.withType( Test ).configureEach {
+	// Some failure modes (e.g. waiting for acknowledgements that never arrive) block forever; fail instead of hanging.
+	timeout = java.time.Duration.ofMinutes( 10 )
+	testLogging {
+		events 'failed'
+		exceptionFormat = 'full'
+	}
+}
+
 jacocoTestReport {
 	reports {
 		xml.required = true
@@ -133,7 +142,7 @@ dependencies {
 	compileOnly 'io.confluent:kafka-connect-avro-converter:5.0.0' // Convert Kafka Connect data to Apache Avro format.
 	api 'javax.jms:javax.jms-api:2.0'
 
-	testImplementation 'junit:junit:4.12'
+	testImplementation 'junit:junit:4.13.2'
 	testImplementation 'org.apache.kafka:connect-api:1.1.0'
 	testImplementation 'org.apache.kafka:connect-json:1.1.0'
 	testImplementation 'org.apache.activemq:activemq-broker:5.15.4'

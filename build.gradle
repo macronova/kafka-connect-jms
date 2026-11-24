@@ -1,41 +1,44 @@
 // Release command:
-// $ gradle clean build zip # (optionally 'publish' to release new version in Maven repository)
+// $ ./gradlew clean build zip # (optionally 'publish' to release new version in Maven repository)
 
-import org.apache.tools.ant.filters.*
+import org.apache.tools.ant.filters.ReplaceTokens
 
-apply plugin: 'java'
-apply plugin: 'maven-publish'
-apply plugin: 'signing'
-apply plugin: 'idea'
-apply plugin: 'jacoco'
+plugins {
+	id 'java-library'
+	id 'maven-publish'
+	id 'signing'
+	id 'idea'
+	id 'jacoco'
+}
 
 group = 'io.macronova.kafka'
 version = '1.0.0'
 
-sourceCompatibility = '1.8'
-targetCompatibility = '1.8'
+java {
+	withSourcesJar()
+	withJavadocJar()
+}
+
+tasks.withType( JavaCompile ).configureEach {
+	options.release = 8
+	options.encoding = 'UTF-8'
+}
+
+tasks.withType( Javadoc ).configureEach {
+	options.addStringOption( 'Xdoclint:none', '-quiet' )
+}
 
 repositories {
 	mavenCentral()
 	maven {
-		url "http://packages.confluent.io/maven"
+		url = uri( 'https://packages.confluent.io/maven' )
 	}
-}
-
-task sourcesJar(type: Jar, dependsOn: classes) {
-	classifier = 'sources'
-	from sourceSets.main.allSource
-}
-
-task javadocJar(type: Jar, dependsOn: javadoc) {
-	classifier = 'javadoc'
-	from javadoc.destinationDir
 }
 
 jacocoTestReport {
 	reports {
-		xml.enabled true
-		html.enabled false
+		xml.required = true
+		html.required = false
 	}
 }
 
@@ -43,10 +46,8 @@ check.dependsOn jacocoTestReport
 
 publishing {
 	publications {
-		mavenJava(MavenPublication) {
+		mavenJava( MavenPublication ) {
 			from components.java
-			artifact sourcesJar
-			artifact javadocJar
 			pom {
 				name = 'Kafka Connect JMS'
 				description = 'Sink and source JMS connector for Kafka Connect.'
@@ -75,83 +76,78 @@ publishing {
 	repositories {
 		maven {
 			credentials {
-				username project.hasProperty( 'ossrhUsername' ) ? project.property( 'ossrhUsername' ) : ''
-				password project.hasProperty( 'ossrhPassword' ) ? project.property( 'ossrhPassword' ) : ''
+				username = project.hasProperty( 'ossrhUsername' ) ? project.property( 'ossrhUsername' ) : ''
+				password = project.hasProperty( 'ossrhPassword' ) ? project.property( 'ossrhPassword' ) : ''
 			}
-			url = version.endsWith('SNAPSHOT') ? "$buildDir/repos/snapshots" : "$buildDir/repos/releases"
+			url = version.endsWith( 'SNAPSHOT' ) ? "$buildDir/repos/snapshots" : "$buildDir/repos/releases"
 			// url = version.endsWith('SNAPSHOT') ? "https://oss.sonatype.org/content/repositories/snapshots/" : "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
 		}
 	}
 }
 
 signing {
+	// Only sign when a key is configured, so that plain builds work without secrets.
+	required = project.hasProperty( 'signing.keyId' ) && project.hasProperty( 'signing.secretKeyRingFile' ) &&
+			file( project.property( 'signing.secretKeyRingFile' ) ).exists()
 	sign publishing.publications.mavenJava
 }
 
-task prepareConfluentHubArchive(type: Copy, dependsOn: 'build') {
-	from('docs/manifest.json') {
-		destinationDir file("$buildDir")
-		expand(project: project)
+tasks.register( 'prepareConfluentHubArchive', Copy ) {
+	dependsOn 'build'
+	into layout.buildDirectory
+	from( 'docs/manifest.json' ) {
+		expand( project: project )
 	}
-	from('docs') {
+	from( 'docs' ) {
 		include 'macronova-logo.png'
 		include 'jms-logo.png'
 		include 'apache-logo.png'
-		into "archive/assets"
+		into 'archive/assets'
 	}
-	from(".") {
+	from( '.' ) {
 		include 'README.md'
 		include 'LICENSE'
-		into "archive/doc"
+		into 'archive/doc'
 	}
-	from('docs') {
+	from( 'docs' ) {
 		include 'quickstart-jms-sink.properties'
 		include 'quickstart-jms-source.properties'
-		into "archive/etc"
+		into 'archive/etc'
 	}
-	from("$buildDir/libs") {
+	from( layout.buildDirectory.dir( 'libs' ) ) {
 		include "${project.name}-${project.version}.jar"
-		into "archive/lib"
+		into 'archive/lib'
 	}
 }
 
-task buildConfluentHubArchive(type: Zip, dependsOn: 'prepareConfluentHubArchive') {
-	from files("$buildDir/manifest.json", "$buildDir/archive")
-	archiveName "macronova-${project.name}-${project.version}.zip"
-	destinationDir(file("$buildDir/confluent-hub"))
+tasks.register( 'buildConfluentHubArchive', Zip ) {
+	dependsOn 'prepareConfluentHubArchive'
+	from layout.buildDirectory.file( 'manifest.json' ), layout.buildDirectory.dir( 'archive' )
+	archiveFileName = "macronova-${project.name}-${project.version}.zip"
+	destinationDirectory = layout.buildDirectory.dir( 'confluent-hub' )
 }
 
 dependencies {
 	compileOnly 'org.apache.kafka:connect-api:1.1.0'
 	compileOnly 'org.apache.kafka:connect-json:1.1.0' // Convert Kafka Connect data to JSON format.
 	compileOnly 'io.confluent:kafka-connect-avro-converter:5.0.0' // Convert Kafka Connect data to Apache Avro format.
-	compile 'javax.jms:javax.jms-api:2.0'
+	api 'javax.jms:javax.jms-api:2.0'
 
-	testCompile 'junit:junit:4.12'
-	testCompile 'org.apache.kafka:connect-api:1.1.0'
-	testCompile 'org.apache.kafka:connect-json:1.1.0'
-	testCompile 'org.apache.activemq:activemq-broker:5.15.4'
+	testImplementation 'junit:junit:4.12'
+	testImplementation 'org.apache.kafka:connect-api:1.1.0'
+	testImplementation 'org.apache.kafka:connect-json:1.1.0'
+	testImplementation 'org.apache.activemq:activemq-broker:5.15.4'
 }
 
 processResources {
 	filter ReplaceTokens, tokens: [
-			"application.version": project.property( "version" )
+			'application.version': project.property( 'version' )
 	]
 }
 
-// Create fat-JAR with all required dependencies.
-//jar {
-//	from {
-//		configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
-//	}
-//}
-
-task wrapper(type: Wrapper) {
-	gradleVersion = '4.10.2'
-}
-
-task zip(type: Zip) {
-	from configurations.runtime.allArtifacts.files
-	from configurations.runtime
-	into (project.name + '-' + project.version)
+// Distribution archive (connector JAR plus runtime dependencies), consumed by the Dockerfile.
+tasks.register( 'zip', Zip ) {
+	from jar
+	from configurations.runtimeClasspath
+	into( project.name + '-' + project.version )
 }

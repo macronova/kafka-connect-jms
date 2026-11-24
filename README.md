@@ -18,15 +18,41 @@ Apache Kafka JMS Connector provides sink and source capabilities to transfer mes
 - [Extensions](#extensions)
   * [Custom JMS Converter](#custom-jms-converter)
   * [Custom JMS Dialect](#custom-jms-dialect)
+- [Building](#building)
 - [Examples](#examples)
 
 ## Installation
 
 1. Download latest release ZIP archive from GitHub and extract its content to temporary folder.
-2. Copy _kafka-connect-jms-${version}.jar_ with all third-party dependencies to Connect `plugin.path` directory.
-    1. Version 1.0.0 depends only on JMS 2.0 API JAR.
+   Two variants are provided, built from the same source code:
+
+   | Archive | JMS API | Use with |
+   |---------|---------|----------|
+   | `kafka-connect-jms-${version}.zip` | `javax.jms` (JMS 2.0) | ActiveMQ 5.x, IBM MQ (JMS 2.0 client), TIBCO EMS, RabbitMQ, Solace and other `javax.jms` clients |
+   | `kafka-connect-jms-jakarta-${version}.zip` | `jakarta.jms` (Jakarta Messaging 3.1) | ActiveMQ 6.x, Artemis 2.x and other `jakarta.jms` clients |
+
+   Pick the one matching the JMS client you install in step 3; they cannot be mixed.
+2. Copy the connector JAR with all third-party dependencies to Connect `plugin.path` directory.
+    1. The connector depends only on the JMS API JAR included in the archive.
 3. Copy JMS client (including dependencies) of given JMS server to Connect `plugin.path` directory.
-3. Configure source and sink connectors according to below documentation.
+4. Configure source and sink connectors according to below documentation.
+
+### Compatibility
+
+The connector is tested against Kafka Connect 3.9 (Java 8, 17, 21, 25) and 4.4 (Java 17, 21, 25), with ActiveMQ 5.19 (`javax.jms`)
+and ActiveMQ 6.4 (`jakarta.jms`). Kafka Connect 4.0 and later requires Java 17.
+
+Kafka Connect 2.4 or newer is required, as the source connector acknowledges JMS messages in
+`SourceTask.commitRecord(SourceRecord, RecordMetadata)`.
+
+## Building
+
+```bash
+$ ./gradlew clean build zip zipJakarta   # JARs in build/libs, archives in build/distributions
+$ ./gradlew testMatrix                   # unit tests for every Kafka version / JDK combination (needs JDKs 8, 17, 21 and 25)
+```
+
+The Jakarta variant is generated from the same sources: `javax.jms` is rewritten to `jakarta.jms` at build time (see _gradle/jakarta.gradle_).
 
 ## JMS Interaction
 
@@ -255,7 +281,7 @@ Please review _examples_ folder which contains Docker Compose manifests demonstr
 Steps to quickly run Docker Compose setup from _examples_ directory:
 1. Build project from source code.
     ```bash
-    $ gradle clean build zip
+    $ ./gradlew clean build zip
     ```
 2. Create Docker image.
     ```bash

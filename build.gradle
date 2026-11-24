@@ -235,3 +235,5 @@ tasks.register( 'zip', Zip ) {
 	into( project.name + '-' + project.version )
 }
 
+
+apply from: 'gradle/jakarta.gradle'
